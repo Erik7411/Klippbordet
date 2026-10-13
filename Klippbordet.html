@@ -155,6 +155,8 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <button id="bExport" class="primary" disabled>Exportera klipp</button>
         <div class="progress" id="prog" hidden><i id="progBar"></i></div>
         <p class="note" id="status"></p>
+        <div class="note" id="convHint" hidden>Konvertera med ffmpeg (tidkoden följer med):
+          <pre class="json" id="convCmd" style="margin-top:6px;user-select:all">ffmpeg -i avsnitt.mxf -c:v libx264 -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k avsnitt.mp4</pre></div>
         <div class="result" id="result" hidden>
           <video id="resVid" controls playsinline></video>
           <div class="row"><button id="bDownload" class="primary">Ladda ner</button><span class="note" id="resInfo"></span></div>
@@ -3326,7 +3328,7 @@ const vid = $("vid");
 const S = {
   file:null, fps:25, startTcFrames:90000, totalFrames:0, dur:0,
   inF:null, outF:null, playingClip:false, lastBlob:null, lastName:"",
-  clips:[], qs:[], ep:null, df:false, urls:{}
+  clips:[], qs:[], ep:null, df:false, urls:{}, noExport:null
 };
 
 /* ---------- tidkod ---------- */
@@ -3375,6 +3377,7 @@ async function openFile(file){
   vid.pause(); vid.removeAttribute("src"); vid.load(); S.dur=0; S.totalFrames=0; curF=0;
   S.file=file; $("fname").textContent=file.name; $("drop").hidden=true;
   S.inF=S.outF=null; $("result").hidden=true; setStatus(""); $("bExport").disabled=true;
+  S.noExport=null; $("convHint").hidden=true;
   $("resVid").removeAttribute("src"); if(S.urls.res){ URL.revokeObjectURL(S.urls.res); S.urls.res=null; } S.lastBlob=null; S.df=false;
   const m=file.name.match(/-(\d{3})[A-Z]?-/); S.ep=m?parseInt(m[1],10):null;
   // Bildfrekvensen måste vara känd innan tidkod och antal rutor räknas fram.
@@ -3385,12 +3388,14 @@ async function openFile(file){
     if(vt){ const st=await vt.computePacketStats(100); if(st&&st.averagePacketRate>1) S.fps=Math.round(st.averagePacketRate*100)/100; }
     const at=await input.getPrimaryAudioTrack();
     let notes=[];
-    if(vt && !(await vt.canDecode())) notes.push(`Webbläsaren kan inte avkoda filens video (${vt.codec}).`);
-    if(at && !(await at.canDecode())) notes.push(`Webbläsaren kan inte avkoda filens ljud (${at.codec}).`);
+    if(!vt) S.noExport="Filen saknar videospår.";
+    else if(!(await vt.canDecode())) S.noExport=`Webbläsaren kan inte avkoda filens video (${codecName(vt.codec)}).`;
+    if(at && !(await at.canDecode())) notes.push(`Webbläsaren kan inte avkoda filens ljud (${codecName(at.codec)}), så klippen exporteras utan ljud.`);
     if(!at) notes.push("Filen saknar ljudspår.");
     $("codecNote").textContent=notes.join(" ");
     $("codecNote").className=notes.length?"warn":"note";
-  }catch(e){ $("codecNote").textContent="Kunde inte läsa filens spår: "+e.message; $("codecNote").className="err"; }
+  }catch(e){ $("codecNote").textContent=""; S.noExport=/unsupported|unrecognizable/i.test(e.message)?"Filformatet stöds inte.":"Filen kunde inte läsas: "+e.message; }
+  if(S.noExport) showNoExport();
   if(seq!==openSeq) return;
   let r=null;
   try{ r=await readMp4Timecode(file); }catch(e){}
@@ -3414,7 +3419,20 @@ vid.addEventListener("loadedmetadata",()=>{
   S.dur=vid.duration; S.totalFrames=Math.floor(S.dur*S.fps+1e-6);
   $("tl1").textContent=fmtMin(S.dur); seekFrame(0); $("bExport").disabled=true; updateUi();
 });
-vid.addEventListener("error",()=>setStatus("Webbläsaren kan inte spela upp filen. Prova Chrome på datorn.","err"));
+vid.addEventListener("error",()=>{ if(!vid.getAttribute("src")) return; if(S.noExport) return showNoExport();
+  setStatus("Webbläsaren kan inte spela upp filen. Klippbordet klarar MP4, MOV, MKV och WebM med H.264, VP9 eller AV1.","err"); showConvHint(); });
+const CODEC_NAMES={avc:"H.264",hevc:"H.265/HEVC",vp8:"VP8",vp9:"VP9",av1:"AV1",prores:"ProRes",aac:"AAC",opus:"Opus",mp3:"MP3",flac:"FLAC",ac3:"AC-3",eac3:"E-AC-3"};
+const codecName=c=>c==null?"okänd kodek, till exempel MPEG-2/XDCAM eller DNxHD":(CODEC_NAMES[c]||c);
+function showConvHint(){
+  const n=S.file?S.file.name:"avsnitt.mxf", q=x=>`"${x.replace(/"/g,'\\"')}"`;
+  $("convCmd").textContent=`ffmpeg -i ${q(n)} -c:v libx264 -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k ${q(n.replace(/\.[^.]+$/,"")+"_h264.mp4")}`;
+  $("convHint").hidden=false;
+}
+/* Filen kan inte klippas: säg det direkt när den öppnas i stället för först vid export. */
+function showNoExport(){
+  setStatus(S.noExport+" Klipp kan inte exporteras från den här filen. Gör först en H.264-kopia i MP4, se nedan.","err");
+  showConvHint(); $("bExport").disabled=true;
+}
 const fmtMin=s=>`${pad(Math.floor(s/60))}:${pad(Math.floor(s%60))}`;
 
 /* Läser starttidkoden ur MP4/MOV (tmcd-spår). Returnerar {count, nFrames, dropFrame} eller null. */
@@ -3514,7 +3532,7 @@ function updateUi(){
     if(n<1){ lenTxt="UT ligger före IN."; $("lenNote").className="err"; }
   }
   $("lenNote").textContent=lenTxt;
-  $("bExport").disabled=!(hasR&&S.outF>=S.inF);
+  $("bExport").disabled=!!S.noExport||!(hasR&&S.outF>=S.inF);
 }
 function setIn(){ if(!S.dur) return; S.inF=curF; if(S.outF!=null&&S.outF<S.inF) S.outF=null; updateUi(); saveStore(); }
 function setOut(){ if(!S.dur) return; S.outF=curF; if(S.inF!=null&&S.inF>S.outF) S.inF=null; updateUi(); saveStore(); }
@@ -3594,7 +3612,7 @@ async function exportClip(){
     input=new M.Input({source:new M.BlobSource(S.file),formats:M.ALL_FORMATS});
     const vt=await input.getPrimaryVideoTrack(); const at=await input.getPrimaryAudioTrack();
     if(!vt) throw new Error("Filen saknar videospår.");
-    if(!(await vt.canDecode())) throw new Error(`Webbläsaren kan inte avkoda videon (${vt.codec}). Använd Chrome.`);
+    if(!(await vt.canDecode())) throw new Error(`Webbläsaren kan inte avkoda videon (${codecName(vt.codec)}).`);
     const w=await vt.getDisplayWidth(), h=await vt.getDisplayHeight();
     const vCodec=await pickVideoCodec(w,h); if(!vCodec) throw new Error("Webbläsaren kan inte koda video.");
     const useAudio=at && await at.canDecode();
