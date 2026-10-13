@@ -95,7 +95,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
   <header class="top">
     <div class="brand">Klippbordet<small>Klipp till Quiz i Play</small></div>
     <label class="btn" for="file" style="display:inline-flex;align-items:center">Öppna avsnitt…</label>
-    <input id="file" type="file" accept="video/*,.mp4,.mov,.m4v,.mxf" hidden>
+    <input id="file" type="file" accept="video/*,.mp4,.mov,.m4v" hidden>
     <div class="filename" id="fname">Ingen fil öppnad</div>
   </header>
 
@@ -3358,17 +3358,16 @@ function parseInput(str){
 const srcTc=f=>framesToTc(f+S.startTcFrames);
 
 /* ---------- fil ---------- */
+let openSeq=0;
 async function openFile(file){
   if(!file) return;
+  const seq=++openSeq;
+  vid.pause(); vid.removeAttribute("src"); vid.load(); S.dur=0; S.totalFrames=0; curF=0;
   S.file=file; $("fname").textContent=file.name; $("drop").hidden=true;
-  vid.src=URL.createObjectURL(file);
-  S.inF=S.outF=null; $("result").hidden=true; setStatus("");
+  S.inF=S.outF=null; $("result").hidden=true; setStatus(""); $("bExport").disabled=true;
   const m=file.name.match(/-(\d{3})[A-Z]?-/); S.ep=m?parseInt(m[1],10):null;
-  try{
-    const tc=await readMp4Timecode(file);
-    if(tc){ S.startTcFrames=tcToFrames(tc)??90000; $("startTc").value=tc; $("startTc").dataset.src="fil"; }
-    else { $("startTc").dataset.src="antagen"; }
-  }catch(e){ $("startTc").dataset.src="antagen"; }
+  // Bildfrekvensen måste vara känd innan tidkod och antal rutor räknas fram.
+  S.fps=25;
   try{
     const input=new M.Input({source:new M.BlobSource(file),formats:M.ALL_FORMATS});
     const vt=await input.getPrimaryVideoTrack();
@@ -3381,8 +3380,17 @@ async function openFile(file){
     $("codecNote").textContent=notes.join(" ");
     $("codecNote").className=notes.length?"warn":"note";
   }catch(e){ $("codecNote").textContent="Kunde inte läsa filens spår: "+e.message; $("codecNote").className="err"; }
+  if(seq!==openSeq) return;
+  let tc=null, dropFrame=false;
+  try{ const r=await readMp4Timecode(file); if(r){ tc=r.tc; dropFrame=r.dropFrame; } }catch(e){}
+  if(seq!==openSeq) return;
+  if(tc){ $("startTc").value=tc; $("startTc").dataset.src="fil"; }
+  else { $("startTc").value="01:00:00:00"; $("startTc").dataset.src="antagen"; }
+  S.startTcFrames=tcToFrames($("startTc").value)??tcToFrames("01:00:00:00");
   $("fpsNote").textContent=`Bildfrekvens: ${S.fps} rutor/s · starttidkod ${$("startTc").value} (${$("startTc").dataset.src==="fil"?"läst ur filen":"antagen, kontrollera"})`;
+  if(dropFrame) $("codecNote").textContent=($("codecNote").textContent+" Filen har drop frame-tidkod, som inte stöds. Källtidkoderna kan avvika.").trim(), $("codecNote").className="warn";
   loadStore(); suggestName(); renderAll();
+  vid.src=URL.createObjectURL(file);
 }
 vid.addEventListener("loadedmetadata",()=>{
   S.dur=vid.duration; S.totalFrames=Math.floor(S.dur*S.fps+1e-6);
@@ -3391,7 +3399,7 @@ vid.addEventListener("loadedmetadata",()=>{
 vid.addEventListener("error",()=>setStatus("Webbläsaren kan inte spela upp filen. Prova Chrome på datorn.","err"));
 const fmtMin=s=>`${pad(Math.floor(s/60))}:${pad(Math.floor(s%60))}`;
 
-/* Läser starttidkoden ur MP4/MOV (tmcd-spår). Returnerar "HH:MM:SS:FF" eller null. */
+/* Läser starttidkoden ur MP4/MOV (tmcd-spår). Returnerar {tc:"HH:MM:SS:FF", dropFrame} eller null. */
 async function readMp4Timecode(file){
   const rd=async(o,n)=>new DataView(await file.slice(o,o+n).arrayBuffer());
   const type=dv=>String.fromCharCode(dv.getUint8(4),dv.getUint8(5),dv.getUint8(6),dv.getUint8(7));
@@ -3414,12 +3422,11 @@ async function readMp4Timecode(file){
     if(ht!=="tmcd") continue;
     const minf=find(mk,"minf"); const stbl=minf&&find(kids(minf.b,minf.e),"stbl"); if(!stbl) continue;
     const sk=kids(stbl.b,stbl.e); const stsd=find(sk,"stsd"); const stco=find(sk,"stco")||find(sk,"co64"); if(!stsd||!stco) continue;
-    const ent=stsd.b+8; const nFrames=buf.getUint8(ent+32)||25; const flags=buf.getUint32(ent+16);
+    const ent=stsd.b+8; const nFrames=buf.getUint8(ent+32)||25; const flags=buf.getUint32(ent+20);
     const first=stco.t==="co64"?Number(buf.getBigUint64(stco.b+8)):buf.getUint32(stco.b+8);
     const cnt=(await rd(first,4)).getUint32(0);
-    if(flags&1) return null; // drop frame stöds inte här
     const ff=cnt%nFrames, s=Math.floor(cnt/nFrames);
-    return `${pad(Math.floor(s/3600))}:${pad(Math.floor(s/60)%60)}:${pad(s%60)}:${pad(ff)}`;
+    return {tc:`${pad(Math.floor(s/3600))}:${pad(Math.floor(s/60)%60)}:${pad(s%60)}:${pad(ff)}`, dropFrame:!!(flags&1)};
   }
   return null;
 }
@@ -3715,8 +3722,15 @@ $("bAddQ").onclick=()=>{ const q=newQ(); const n=S.clips.length; if(n) q.media=S
 $("bCopy").onclick=copyJson;
 const doGoto=()=>{ const f=parseInput($("goto").value); if(f==null) return setStatus("Tidkoden gick inte att tolka.","err"); if(!vid.paused) vid.pause(); seekFrame(f); };
 $("bGoto").onclick=doGoto; $("goto").onkeydown=e=>{ if(e.key==="Enter") doGoto(); };
-$("inTc").onchange=()=>{ const f=parseInput($("inTc").value); if(f!=null){ S.inF=f; saveStore(); } updateUi(); };
-$("outTc").onchange=()=>{ const f=parseInput($("outTc").value); if(f!=null){ S.outF=f; saveStore(); } updateUi(); };
+/* Tolkar en IN/UT-tidkod och godtar bara rutor som finns i filen. */
+function parseMark(str){
+  const f=parseInput(str);
+  if(f==null){ setStatus("Tidkoden gick inte att tolka.","err"); return null; }
+  if(f<0||f>=S.totalFrames){ setStatus(`Tidkoden ligger utanför filen (${srcTc(0)}–${srcTc(Math.max(0,S.totalFrames-1))}).`,"err"); return null; }
+  setStatus(""); return f;
+}
+$("inTc").onchange=()=>{ const f=parseMark($("inTc").value); if(f!=null){ S.inF=f; saveStore(); } updateUi(); };
+$("outTc").onchange=()=>{ const f=parseMark($("outTc").value); if(f!=null){ S.outF=f; saveStore(); } updateUi(); };
 $("freeze").oninput=updateUi;
 $("startTc").onchange=()=>{ const f=tcToFrames($("startTc").value); if(f!=null){ S.startTcFrames=f; $("startTc").dataset.src="manuell"; updateUi(); } };
 $("prefix").onchange=()=>{ saveStore(); suggestName(); };
