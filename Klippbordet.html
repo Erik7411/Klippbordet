@@ -3326,16 +3326,24 @@ const vid = $("vid");
 const S = {
   file:null, fps:25, startTcFrames:90000, totalFrames:0, dur:0,
   inF:null, outF:null, playingClip:false, lastBlob:null, lastName:"",
-  clips:[], qs:[], ep:null
+  clips:[], qs:[], ep:null, df:false, urls:{}
 };
 
 /* ---------- tidkod ---------- */
 const pad=(n,l=2)=>String(n).padStart(l,"0");
 function fpsInt(){return Math.round(S.fps)}
-function framesToTc(f){ // HH:MM:SS:FF
+/* Drop frame (29,97 och 59,94): bildrutenummer 0 och 1 (0–3 vid 59,94) hoppas över
+   varje minut utom var tionde. Rutorna räknas ändå i följd, det är bara etiketten som hoppar. */
+const dfDrop=()=>fpsInt()/15; // 2 vid 30, 4 vid 60
+function framesToTc(f){ // HH:MM:SS:FF, eller HH:MM:SS;FF vid drop frame
   const r=fpsInt(); if(f<0) f=0;
+  if(S.df){
+    const d=dfDrop(), per10=r*600-d*9, perMin=r*60-d;
+    const D=Math.floor(f/per10), M=f%per10;
+    f+=d*9*D+(M<d?0:d*Math.floor((M-d)/perMin));
+  }
   const ff=f%r, s=Math.floor(f/r), ss=s%60, m=Math.floor(s/60), mm=m%60, hh=Math.floor(m/60);
-  return `${pad(hh)}:${pad(mm)}:${pad(ss)}:${pad(ff)}`;
+  return `${pad(hh)}:${pad(mm)}:${pad(ss)}${S.df?";":":"}${pad(ff)}`;
 }
 function framesToRel(f){ // MM:SS:FF från filstart
   const r=fpsInt(); const ff=f%r, s=Math.floor(f/r);
@@ -3343,7 +3351,9 @@ function framesToRel(f){ // MM:SS:FF från filstart
 }
 function tcToFrames(str){ // HH:MM:SS:FF → absoluta rutor
   const p=str.trim().split(/[:;.]/).map(Number); if(p.length!==4||p.some(isNaN)) return null;
-  return ((p[0]*60+p[1])*60+p[2])*fpsInt()+p[3];
+  let f=((p[0]*60+p[1])*60+p[2])*fpsInt()+p[3];
+  if(S.df){ const mins=p[0]*60+p[1]; f-=dfDrop()*(mins-Math.floor(mins/10)); }
+  return f;
 }
 /* Tolkar inmatning till rutnummer i filen (0 = första rutan). */
 function parseInput(str){
@@ -3365,6 +3375,7 @@ async function openFile(file){
   vid.pause(); vid.removeAttribute("src"); vid.load(); S.dur=0; S.totalFrames=0; curF=0;
   S.file=file; $("fname").textContent=file.name; $("drop").hidden=true;
   S.inF=S.outF=null; $("result").hidden=true; setStatus(""); $("bExport").disabled=true;
+  $("resVid").removeAttribute("src"); if(S.urls.res){ URL.revokeObjectURL(S.urls.res); S.urls.res=null; } S.lastBlob=null; S.df=false;
   const m=file.name.match(/-(\d{3})[A-Z]?-/); S.ep=m?parseInt(m[1],10):null;
   // Bildfrekvensen måste vara känd innan tidkod och antal rutor räknas fram.
   S.fps=25;
@@ -3381,16 +3392,23 @@ async function openFile(file){
     $("codecNote").className=notes.length?"warn":"note";
   }catch(e){ $("codecNote").textContent="Kunde inte läsa filens spår: "+e.message; $("codecNote").className="err"; }
   if(seq!==openSeq) return;
-  let tc=null, dropFrame=false;
-  try{ const r=await readMp4Timecode(file); if(r){ tc=r.tc; dropFrame=r.dropFrame; } }catch(e){}
+  let r=null;
+  try{ r=await readMp4Timecode(file); }catch(e){}
   if(seq!==openSeq) return;
-  if(tc){ $("startTc").value=tc; $("startTc").dataset.src="fil"; }
-  else { $("startTc").value="01:00:00:00"; $("startTc").dataset.src="antagen"; }
+  // Drop frame är bara definierat för 29,97 och 59,94 rutor/s.
+  const dfOk=(fpsInt()===30||fpsInt()===60)&&Math.abs(S.fps-fpsInt())>0.01;
+  S.df=!!(r&&r.dropFrame&&dfOk);
+  if(r&&r.dropFrame&&!dfOk){ $("codecNote").textContent=($("codecNote").textContent+` Filen anger drop frame-tidkod men har ${S.fps} rutor/s. Tidkoden räknas utan drop frame.`).trim(); $("codecNote").className="warn"; }
+  if(r){
+    let tc;
+    if(S.df) tc=framesToTc(r.count);
+    else { const ff=r.count%r.nFrames, s=Math.floor(r.count/r.nFrames); tc=`${pad(Math.floor(s/3600))}:${pad(Math.floor(s/60)%60)}:${pad(s%60)}:${pad(ff)}`; }
+    $("startTc").value=tc; $("startTc").dataset.src="fil";
+  } else { $("startTc").value="01:00:00:00"; $("startTc").dataset.src="antagen"; }
   S.startTcFrames=tcToFrames($("startTc").value)??tcToFrames("01:00:00:00");
-  $("fpsNote").textContent=`Bildfrekvens: ${S.fps} rutor/s · starttidkod ${$("startTc").value} (${$("startTc").dataset.src==="fil"?"läst ur filen":"antagen, kontrollera"})`;
-  if(dropFrame) $("codecNote").textContent=($("codecNote").textContent+" Filen har drop frame-tidkod, som inte stöds. Källtidkoderna kan avvika.").trim(), $("codecNote").className="warn";
+  $("fpsNote").textContent=`Bildfrekvens: ${S.fps} rutor/s${S.df?" (drop frame)":""} · starttidkod ${$("startTc").value} (${$("startTc").dataset.src==="fil"?"läst ur filen":"antagen, kontrollera"})`;
   loadStore(); suggestName(); renderAll();
-  vid.src=URL.createObjectURL(file);
+  vid.src=setUrl("vid",file);
 }
 vid.addEventListener("loadedmetadata",()=>{
   S.dur=vid.duration; S.totalFrames=Math.floor(S.dur*S.fps+1e-6);
@@ -3399,7 +3417,7 @@ vid.addEventListener("loadedmetadata",()=>{
 vid.addEventListener("error",()=>setStatus("Webbläsaren kan inte spela upp filen. Prova Chrome på datorn.","err"));
 const fmtMin=s=>`${pad(Math.floor(s/60))}:${pad(Math.floor(s%60))}`;
 
-/* Läser starttidkoden ur MP4/MOV (tmcd-spår). Returnerar {tc:"HH:MM:SS:FF", dropFrame} eller null. */
+/* Läser starttidkoden ur MP4/MOV (tmcd-spår). Returnerar {count, nFrames, dropFrame} eller null. */
 async function readMp4Timecode(file){
   const rd=async(o,n)=>new DataView(await file.slice(o,o+n).arrayBuffer());
   const type=dv=>String.fromCharCode(dv.getUint8(4),dv.getUint8(5),dv.getUint8(6),dv.getUint8(7));
@@ -3425,8 +3443,7 @@ async function readMp4Timecode(file){
     const ent=stsd.b+8; const nFrames=buf.getUint8(ent+32)||25; const flags=buf.getUint32(ent+20);
     const first=stco.t==="co64"?Number(buf.getBigUint64(stco.b+8)):buf.getUint32(stco.b+8);
     const cnt=(await rd(first,4)).getUint32(0);
-    const ff=cnt%nFrames, s=Math.floor(cnt/nFrames);
-    return {tc:`${pad(Math.floor(s/3600))}:${pad(Math.floor(s/60)%60)}:${pad(s%60)}:${pad(ff)}`, dropFrame:!!(flags&1)};
+    return {count:cnt, nFrames, dropFrame:!!(flags&1)};
   }
   return null;
 }
@@ -3535,6 +3552,35 @@ async function pickAudioCodec(){
   if(await M.canEncodeAudio("opus")) return "opus";
   return null;
 }
+/* Ljudkodare lägger in tystnad i början (AAC: ofta 1024 eller 2112 sampel) utan att alltid
+   ange det. Fördröjningen mäts genom att koda och avkoda en kort ton, och ljudet flyttas
+   sedan lika mycket bakåt. Mediabunny skriver då en edit-lista som döljer tystnaden. */
+const delayCache=new Map();
+function measureAudioDelay(codec,rate,ch){
+  const k=`${codec}/${rate}/${ch}`;
+  if(!delayCache.has(k)) delayCache.set(k,(async()=>{
+    try{
+      const lead=4800, N=lead+9600;
+      const o=new M.Output({format:new M.Mp4OutputFormat({fastStart:"in-memory"}),target:new M.BufferTarget()});
+      const src=new M.AudioSampleSource({codec,bitrate:128000}); o.addAudioTrack(src); await o.start();
+      const d=new Float32Array(N*ch);
+      for(let c=0;c<ch;c++) for(let i=lead;i<N;i++) d[c*N+i]=0.8*Math.sin(2*Math.PI*1000*(i-lead)/rate);
+      const as=new M.AudioSample({data:d,format:"f32-planar",numberOfChannels:ch,sampleRate:rate,timestamp:0}); await src.add(as); as.close();
+      src.close(); await o.finalize();
+      const inp=new M.Input({source:new M.BufferSource(o.target.buffer),formats:M.ALL_FORMATS});
+      let pos=null;
+      for await (const x of new M.AudioSampleSink(await inp.getPrimaryAudioTrack()).samples()){
+        if(pos==null){ const t=new Float32Array(x.numberOfFrames); x.copyTo(t,{planeIndex:0,format:"f32-planar"});
+          const i=t.findIndex(v=>Math.abs(v)>0.05); if(i>=0) pos=Math.round(x.timestamp*rate)+i; }
+        x.close();
+      }
+      if(pos==null) return 0;
+      const delay=pos-lead;
+      return Math.abs(delay)<=8||delay<0||delay>rate/2 ? 0 : delay; // brus i mätningen eller orimligt värde
+    }catch(e){ console.warn("Kunde inte mäta ljudkodarens fördröjning",e); return 0; }
+  })());
+  return delayCache.get(k);
+}
 async function exportClip(){
   if(S.inF==null||S.outF==null||S.outF<S.inF) return;
   const btn=$("bExport"); btn.disabled=true; $("result").hidden=true;
@@ -3591,8 +3637,8 @@ async function exportClip(){
     if(aSrc){
       setStatus("Kodar ljud…");
       const aSink=new M.AudioSampleSink(at);
-      let rate=48000, ch=2, outPos=0; // i ljudrutor
-      const clipLen=Math.round((t1-t0)*48000);
+      let rate=48000, ch=2, outPos=0, shift=null; // i ljudrutor; shift i sekunder
+      const getShift=async()=>shift??=(await measureAudioDelay(aCodec,rate,ch))/rate;
       for await (const s of aSink.samples(Math.max(0,t0-0.1), t1)){
         rate=s.sampleRate; ch=s.numberOfChannels;
         const sStart=s.timestamp, n=s.numberOfFrames;
@@ -3601,7 +3647,7 @@ async function exportClip(){
         const len=b-a; const data=new Float32Array(len*ch);
         for(let c=0;c<ch;c++){ const tmp=new Float32Array(n); s.copyTo(tmp,{planeIndex:c,format:"f32-planar"}); data.set(tmp.subarray(a,b),c*len); }
         const ts=(sStart+a/rate)-t0;
-        { const as=new M.AudioSample({data,format:"f32-planar",numberOfChannels:ch,sampleRate:rate,timestamp:Math.max(0,ts)}); await aSrc.add(as); as.close(); }
+        { const as=new M.AudioSample({data,format:"f32-planar",numberOfChannels:ch,sampleRate:rate,timestamp:Math.max(0,ts)-await getShift()}); await aSrc.add(as); as.close(); }
         outPos=Math.max(outPos,Math.round((Math.max(0,ts))*rate)+len);
         s.close();
       }
@@ -3609,7 +3655,7 @@ async function exportClip(){
       let pos=Math.max(outPos,0);
       while(pos<total){
         const len=Math.min(4096,total-pos);
-        { const as=new M.AudioSample({data:new Float32Array(len*ch),format:"f32-planar",numberOfChannels:ch,sampleRate:rate,timestamp:pos/rate}); await aSrc.add(as); as.close(); }
+        { const as=new M.AudioSample({data:new Float32Array(len*ch),format:"f32-planar",numberOfChannels:ch,sampleRate:rate,timestamp:pos/rate-await getShift()}); await aSrc.add(as); as.close(); }
         pos+=len;
       }
       aSrc.close();
@@ -3618,7 +3664,7 @@ async function exportClip(){
     await output.finalize();
     const blob=new Blob([output.target.buffer],{type:"video/mp4"});
     S.lastBlob=blob; S.lastName=name;
-    $("resVid").src=URL.createObjectURL(blob);
+    $("resVid").src=setUrl("res",blob);
     $("resInfo").textContent=`${name} · ${(blob.size/1e6).toFixed(2)} MB · ${((nFrames+freezeN)/fps).toFixed(2)} s`;
     $("result").hidden=false; $("progBar").style.width="100%";
     setStatus(warn.length?warn.join(" "):"Klart. Lyssna igenom klippet innan det används.",warn.length?"warn":"note");
@@ -3632,17 +3678,19 @@ async function exportClip(){
     try{ input&&input.dispose&&input.dispose(); }catch(_){}
   }
 }
+/* Ger en blob-URL för en plats ("vid", "res") och frigör den förra, så att gamla filer inte ligger kvar i minnet. */
+function setUrl(slot,blob){ if(S.urls[slot]) URL.revokeObjectURL(S.urls[slot]); return S.urls[slot]=URL.createObjectURL(blob); }
 function download(){
   if(!S.lastBlob) return;
   const a=document.createElement("a"); a.href=URL.createObjectURL(S.lastBlob); a.download=S.lastName;
-  document.body.appendChild(a); a.click(); a.remove();
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),60000);
 }
 function saveStill(){
   if(!S.dur||!vid.videoWidth) return;
   const c=document.createElement("canvas"); c.width=vid.videoWidth; c.height=vid.videoHeight;
   c.getContext("2d").drawImage(vid,0,0);
-  c.toBlob(b=>{ const a=document.createElement("a"); a.href=URL.createObjectURL(b);
-    a.download=`${($("prefix").value||"bild").trim()}${S.ep!=null?pad(S.ep):""}_ruta_${srcTc(curF).replace(/:/g,"-")}.png`;
+  c.toBlob(b=>{ const a=document.createElement("a"); a.href=URL.createObjectURL(b); setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+    a.download=`${($("prefix").value||"bild").trim()}${S.ep!=null?pad(S.ep):""}_ruta_${srcTc(curF).replace(/[:;]/g,"-")}.png`;
     document.body.appendChild(a); a.click(); a.remove(); },"image/png");
 }
 
@@ -3665,7 +3713,9 @@ function renderClips(){
     li.querySelector("b").textContent=c.name;
     li.querySelector("span").textContent=`${c.inTc} → ${c.outTc}${c.freeze?` · frys ${c.freeze} s`:""}`;
     li.querySelector('[data-a="load"]').onclick=()=>{ S.inF=c.inF; S.outF=c.outF; $("freeze").value=c.freeze||0; $("outName").value=c.name; checkName(); seekFrame(c.inF); };
-    li.querySelector('[data-a="del"]').onclick=()=>{ S.clips.splice(i,1); saveStore(); renderClips(); renderQs(); };
+    li.querySelector('[data-a="del"]').onclick=()=>{ S.clips.splice(i,1);
+      S.qs.forEach(q=>{ if(q.media===c.name) q.media=""; if(q.svar_media===c.name) q.svar_media=""; });
+      saveStore(); renderClips(); renderQs(); };
     ul.appendChild(li);
   });
 }
