@@ -90,12 +90,19 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 .monitors{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
 @media (max-width:700px){.monitors{grid-template-columns:minmax(0,1fr)}}
 .mon{display:grid;gap:6px;min-width:0;align-content:start}
+.mon .screen{outline:2px solid transparent;outline-offset:2px}
+.mon.active .screen{outline-color:var(--accent)}
+.mon.active .monlabel{color:var(--accent)}
+.mon .monlabel::after{content:""}
+.mon.active .monlabel::after{content:" · aktiv"}
+.card .chg{font:600 10.5px var(--f-ui);color:var(--warn)}
 .monhead{display:flex;align-items:baseline;justify-content:space-between;gap:4px 10px;flex-wrap:wrap}
 .monlabel{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
 .mon .tc{font-size:22px}
 .screen .empty{position:absolute;inset:0;display:grid;place-items:center;color:#8e9a9c;font-size:13px;text-align:center;padding:16px}
 .tlbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
-.tlbar h2{margin-right:auto}
+.tlbar h2{margin:0}
+.tlbar #tlMode{margin-right:auto}
 .tlbar button{min-height:30px;padding:4px 9px;font-size:12px}
 .tlwrap{position:relative;touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer;border-radius:5px;overflow:hidden;border:1px solid var(--line)}
 .tlwrap canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
@@ -107,8 +114,8 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 .card .th{aspect-ratio:16/9;background:#000;display:block;width:100%;object-fit:contain}
 .card .meta{padding:7px 8px 4px;display:grid;gap:2px;min-width:0}
 .card b{font:600 12px var(--f-tc);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.card span{font:11px var(--f-tc);color:var(--muted)}
-.card .acts{display:flex;gap:4px;padding:4px 8px 8px}
+.card span{font:11px var(--f-tc);color:var(--muted);white-space:pre-line}
+.card .acts{display:flex;flex-wrap:wrap;gap:4px;padding:4px 8px 8px}
 .card .acts button{min-height:28px;padding:3px 7px;font-size:11.5px;white-space:nowrap}
 .card .acts [data-a="del"]{margin-left:auto}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
@@ -126,7 +133,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
   <div class="main">
     <section class="stage">
       <div class="monitors">
-        <section class="mon" aria-label="Källa">
+        <section class="mon active" id="monSrc" aria-label="Källa">
           <div class="monhead"><span class="monlabel">Källa</span><span class="tc" id="tc">--:--:--:--</span></div>
           <div class="screen" id="screen">
             <video id="vid" playsinline preload="auto"></video>
@@ -134,7 +141,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
           </div>
           <div class="tcrow"><span class="tcsub" id="tcrel">från filstart --:--:--</span><span class="tcsub" id="tcframe">bildruta –</span></div>
         </section>
-        <section class="mon" aria-label="Klipp">
+        <section class="mon" id="monRec" aria-label="Klipp">
           <div class="monhead"><span class="monlabel">Klipp</span><span class="tc" id="rtc">--:--:--:--</span></div>
           <div class="screen">
             <video id="resVid" playsinline preload="auto"></video>
@@ -145,6 +152,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
             <button id="rStart" disabled>Till början</button>
             <button id="rPlay" class="primary" disabled style="min-width:92px">Spela</button>
             <button id="bDownload" hidden>Ladda ner</button>
+            <button id="rReexport" hidden>Exportera igen</button>
           </div>
           <p class="note" id="recInfo"></p>
         </section>
@@ -168,7 +176,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 
       <section class="panel" aria-labelledby="h-tl">
         <div class="tlbar">
-          <h2 id="h-tl">Tidslinje</h2>
+          <h2 id="h-tl">Tidslinje</h2><span class="note" id="tlMode">Källa: hela avsnittet</span>
           <span class="note" id="waveNote"></span>
           <button id="zOut" title="Minus">−</button><button id="zIn" title="Plus">+</button>
           <button id="zFit">Hela</button><button id="zClip">Klippet</button>
@@ -178,7 +186,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
           <div class="label-row"><span id="tl0">00:00</span><span>hela avsnittet</span><span id="tl1">--:--</span></div>
         </div>
         <div class="tlwrap" id="tlc" style="height:76px" aria-label="Tidslinje med spår"><canvas id="tlBase"></canvas><canvas id="tlOver"></canvas></div>
-        <div class="keys"><span><kbd>Mellanslag</kbd> spela/paus</span><span><kbd>←</kbd><kbd>→</kbd> en ruta</span><span><kbd>Shift</kbd>+pil en sekund</span><span><kbd>I</kbd><kbd>O</kbd> in/ut</span><span><kbd>P</kbd> spela klippet</span><span><kbd>+</kbd><kbd>−</kbd> zooma</span><span><kbd>Ctrl</kbd>/<kbd>⌘</kbd>+hjul zooma, sidledes hjul panorera</span><span>Dra i IN/UT på tidslinjen för att flytta dem</span></div>
+        <div class="keys"><span><kbd>Mellanslag</kbd> spela/paus</span><span><kbd>←</kbd><kbd>→</kbd> en ruta</span><span><kbd>Shift</kbd>+pil en sekund</span><span><kbd>I</kbd><kbd>O</kbd> in/ut</span><span><kbd>P</kbd> spela klippet</span><span><kbd>+</kbd><kbd>−</kbd> zooma</span><span><kbd>Ctrl</kbd>/<kbd>⌘</kbd>+hjul zooma, sidledes hjul panorera</span><span>Dra i IN/UT på tidslinjen för att flytta dem</span><span>Klicka på en bildskärm för att göra den aktiv. När klippet är aktivt trimmar IN/UT klippet.</span></div>
       </section>
 
       <section class="panel" aria-labelledby="h-bin">
@@ -3367,7 +3375,7 @@ const vid = $("vid");
 const S = {
   file:null, fps:25, startTcFrames:90000, totalFrames:0, dur:0,
   inF:null, outF:null, playingClip:false, blobs:new Map(),
-  clips:[], qs:[], ep:null, df:false, urls:{}, noExport:null
+  clips:[], qs:[], ep:null, df:false, urls:{}, noExport:null, active:"src"
 };
 
 /* ---------- tidkod ---------- */
@@ -3511,7 +3519,7 @@ function frameFromTime(t){return Math.floor(t*S.fps+1e-3)}
 function seekFrame(f,reveal=true){
   if(!S.dur) return;
   f=Math.max(0,Math.min(S.totalFrames-1,f)); curF=f;
-  vid.currentTime=(f+0.25)/S.fps; if(reveal) tlReveal(f/S.fps); updateUi();
+  vid.currentTime=(f+0.25)/S.fps; if(reveal&&S.active==="src") tlReveal(f/S.fps); updateUi();
 }
 function step(n){ if(!vid.paused) vid.pause(); seekFrame(curF+n); }
 function togglePlay(){ if(!S.dur) return; S.playingClip=false; vid.paused?vid.play():vid.pause(); }
@@ -3535,7 +3543,9 @@ function playClip(){
 
 /* ---------- tidslinjer ---------- */
 function bindLine(el,toFrame){
-  const go=e=>{ if(!S.dur) return; const r=el.getBoundingClientRect(); const x=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)); if(!vid.paused) vid.pause(); seekFrame(toFrame(x)); };
+  const go=e=>{ if(!S.dur) return; const r=el.getBoundingClientRect(); const x=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
+    if(S.active==="rec"&&el.id==="tl") return tlSetView(x*S.dur-TL.view.span/2,TL.view.span);
+    if(!vid.paused) vid.pause(); seekFrame(toFrame(x)); };
   el.addEventListener("pointerdown",e=>{ el.setPointerCapture(e.pointerId); go(e); el.onpointermove=go; });
   el.addEventListener("pointerup",()=>{ el.onpointermove=null; });
 }
@@ -3568,8 +3578,10 @@ function tlSetView(start,span){
   if(start===TL.view.start&&span===TL.view.span) return;
   TL.view={start,span}; tlDirty(); tlDrawOver(); overviewWin();
 }
-function tlZoom(f,anchor){ const v=TL.view, a=anchor??curF/S.fps, span=v.span*f; tlSetView(a-(a-v.start)*(span/v.span),span); }
-function tlFitClip(){ if(S.inF==null||S.outF==null) return setStatus("Sätt IN och UT först.","warn"); const a=S.inF/S.fps, b=(S.outF+1)/S.fps, pad=Math.max(0.5,(b-a)*0.2); tlSetView(a-pad,b-a+2*pad); }
+function tlZoom(f,anchor){ const v=TL.view, a=anchor??(S.active==="rec"&&REC.clip?(REC.clip.inF+Math.max(0,recFrame()))/S.fps:curF/S.fps), span=v.span*f; tlSetView(a-(a-v.start)*(span/v.span),span); }
+/* IN/UT som tidslinjen visar: källans märken, eller klippets när klippmonitorn är aktiv. */
+const marks=()=>S.active==="rec"&&REC.clip?REC.clip:S;
+function tlFitClip(){ const m=marks(); if(m.inF==null||m.outF==null) return setStatus("Sätt IN och UT först.","warn"); const a=m.inF/S.fps, b=(m.outF+1)/S.fps, pad=Math.max(0.5,(b-a)*0.2); tlSetView(a-pad,b-a+2*pad); }
 function tlReveal(t){ const v=TL.view; if(t<v.start||t>v.start+v.span) tlSetView(t-v.span/2,v.span); }
 function tlDirty(){ if(TL.dirty) return; TL.dirty=true; requestAnimationFrame(()=>{ TL.dirty=false; tlDrawBase(); }); }
 function overviewWin(){
@@ -3648,14 +3660,21 @@ function tlDrawOver(){
   ctx.save(); ctx.beginPath(); ctx.rect(G,0,TL.w-G,H); ctx.clip();
   ctx.font="600 9px "+FONT_TC; ctx.textBaseline="middle";
   const flag=(x,txt,col,right)=>{ const w=ctx.measureText(txt).width+8, fx=right?x-w:x; ctx.fillStyle=col; ctx.fillRect(fx,RULER-14,w,13); ctx.fillStyle=C.bg; ctx.fillText(txt,fx+4,RULER-7.5); };
-  if(S.inF!=null){
-    const xi=tx(S.inF/S.fps);
-    if(S.outF!=null&&S.outF>=S.inF){ const xo=tx((S.outF+1)/S.fps);
-      ctx.globalAlpha=.22; ctx.fillStyle=C.accent; ctx.fillRect(xi,RULER,xo-xi,H-RULER); ctx.globalAlpha=1;
-      ctx.fillStyle=C.out; ctx.fillRect(xo-1,0,2,H); flag(xo,"UT",C.out,true); }
+  const mk=marks(), rec=mk!==S;
+  if(rec){ // källmaterial utanför klippet tonas ned; det är handtag att trimma in i
+    const xi=tx(mk.inF/S.fps), xo=tx((mk.outF+1)/S.fps); ctx.globalAlpha=.75; ctx.fillStyle=C.bg;
+    ctx.fillRect(G,RULER,Math.max(0,xi-G),H-RULER); ctx.fillRect(xo,RULER,Math.max(0,TL.w-xo),H-RULER); ctx.globalAlpha=1;
+  }
+  if(mk.inF!=null){
+    const xi=tx(mk.inF/S.fps);
+    if(mk.outF!=null&&mk.outF>=mk.inF){ const xo=tx((mk.outF+1)/S.fps);
+      if(!rec){ ctx.globalAlpha=.22; ctx.fillStyle=C.accent; ctx.fillRect(xi,RULER,xo-xi,H-RULER); ctx.globalAlpha=1; }
+      ctx.fillStyle=C.out; ctx.fillRect(xo-1,0,2,H); flag(xo,"UT",C.out,true);
+      if(rec&&mk.freeze) flag(xo+2,`+ frys ${mk.freeze} s`,C.muted,false); }
     ctx.fillStyle=C.in; ctx.fillRect(xi-1,0,2,H); flag(xi,"IN",C.in,false);
-  } else if(S.outF!=null){ const xo=tx((S.outF+1)/S.fps); ctx.fillStyle=C.out; ctx.fillRect(xo-1,0,2,H); flag(xo,"UT",C.out,true); }
-  const x=tx(curF/S.fps), fw=tx((curF+1)/S.fps)-x;
+  } else if(mk.outF!=null){ const xo=tx((mk.outF+1)/S.fps); ctx.fillStyle=C.out; ctx.fillRect(xo-1,0,2,H); flag(xo,"UT",C.out,true); }
+  const pf=rec?mk.inF+Math.max(0,Math.min(recLen(mk)-1,recFrame())):curF;
+  const x=tx(pf/S.fps), fw=tx((pf+1)/S.fps)-x;
   if(fw>3){ ctx.globalAlpha=.18; ctx.fillStyle=C.fg; ctx.fillRect(x,RULER,fw,H-RULER); ctx.globalAlpha=1; }
   ctx.fillStyle=C.fg; ctx.fillRect(Math.round(x)-0.5,0,1.5,H);
   ctx.beginPath(); ctx.moveTo(x-5,RULER-7); ctx.lineTo(x+5,RULER-7); ctx.lineTo(x,RULER); ctx.fill();
@@ -3719,9 +3738,16 @@ async function tlSetup(){
 }
 let tlDrag=null;
 const tlX=e=>e.clientX-tlEl.getBoundingClientRect().left;
-const nearMark=x=>{ if(S.inF!=null&&Math.abs(tx(S.inF/S.fps)-x)<=6) return "in"; if(S.outF!=null&&Math.abs(tx((S.outF+1)/S.fps)-x)<=6) return "out"; return null; };
+const nearMark=x=>{ const m=marks(); if(m.inF!=null&&Math.abs(tx(m.inF/S.fps)-x)<=6) return "in"; if(m.outF!=null&&Math.abs(tx((m.outF+1)/S.fps)-x)<=6) return "out"; return null; };
+let trimFrom=null;
 function tlMove(x){
   x=Math.max(G,Math.min(TL.w-1,x)); const f=Math.round(xt(x)*S.fps);
+  if(S.active==="rec"&&REC.clip){ const c=REC.clip;
+    if(tlDrag==="in"){ c.inF=Math.max(0,Math.min(c.outF,f)); recSeek(0); }
+    else if(tlDrag==="out"){ c.outF=Math.max(c.inF,Math.min(S.totalFrames-1,f-1)); recSeek(recLen(c)-1); }
+    else recSeek(Math.max(0,Math.min(recLen(c)-1,Math.floor(xt(x)*S.fps)-c.inF)));
+    recUi(); tlDrawOver(); return;
+  }
   if(tlDrag==="in"){ S.inF=Math.max(0,Math.min(S.outF!=null?S.outF:S.totalFrames-1,f)); seekFrame(S.inF,false); }
   else if(tlDrag==="out"){ S.outF=Math.max(S.inF??0,Math.min(S.totalFrames-1,f-1)); seekFrame(S.outF,false); }
   else seekFrame(Math.floor(xt(x)*S.fps),false);
@@ -3729,10 +3755,15 @@ function tlMove(x){
 tlEl.addEventListener("pointerdown",e=>{
   if(!S.dur) return; const x=tlX(e); if(x<G) return;
   tlEl.setPointerCapture(e.pointerId); tlDrag=nearMark(x)||"scrub";
-  if(!vid.paused) vid.pause(); tlMove(x);
+  if(S.active==="rec"&&REC.clip){ rv.pause(); if(tlDrag!=="scrub"){ trimFrom={inF:REC.clip.inF,outF:REC.clip.outF}; recToSrc(); } }
+  else if(!vid.paused) vid.pause();
+  tlMove(x);
 });
 tlEl.addEventListener("pointermove",e=>{ const x=tlX(e); if(tlDrag) return tlMove(x); tlEl.style.cursor=x>=G&&nearMark(x)?"ew-resize":"pointer"; });
-const tlUp=()=>{ if(tlDrag==="in"||tlDrag==="out") saveStore(); tlDrag=null; };
+const tlUp=()=>{
+  if(trimFrom){ const c=REC.clip, t=trimFrom; trimFrom=null; if(c&&(c.inF!==t.inF||c.outF!==t.outF)) trimDone(c,t.inF!==c.inF); else recInfo(); }
+  else if(tlDrag==="in"||tlDrag==="out") saveStore();
+  tlDrag=null; };
 tlEl.addEventListener("pointerup",tlUp); tlEl.addEventListener("pointercancel",tlUp);
 tlEl.addEventListener("wheel",e=>{
   if(!S.dur) return;
@@ -3753,14 +3784,58 @@ function recShow(clip){
   if(blob){ REC.mode="blob"; rv.src=setUrl("res",blob); }
   else { REC.mode="src"; if(S.urls.res){ URL.revokeObjectURL(S.urls.res); S.urls.res=null; } rv.src=S.urls.vid; }
   rv.onloadedmetadata=()=>recSeek(0);
-  $("recEmpty").hidden=true; $("rPlay").disabled=$("rStart").disabled=false; $("bDownload").hidden=!blob;
+  $("recEmpty").hidden=true; $("rPlay").disabled=$("rStart").disabled=false;
   $("recName").textContent=clip.name;
-  const len=(recLen(clip)/S.fps).toFixed(2)+" s"+(clip.freeze?` + frys ${clip.freeze} s`:"");
-  $("recInfo").textContent=blob?`Exporterad fil · ${(blob.size/1e6).toFixed(2)} MB · ${len}`:`Förhandsvisning ur källan · ${len}${clip.freeze?" (frysrutan visas inte)":""}. Exportera igen för att få filen.`;
-  recUi(); renderClips();
+  recInfo(); recUi(); renderClips(); if(S.active==="rec") tlFitClip();
 }
+function recInfo(){
+  const c=REC.clip; if(!c) return; const blob=S.blobs.get(c.name);
+  const len=(recLen(c)/S.fps).toFixed(2)+" s"+(c.freeze?` + frys ${c.freeze} s`:"");
+  $("bDownload").hidden=!blob; $("rReexport").hidden=!c.changed;
+  $("recInfo").textContent=c.changed?`Trimmat sedan exporten · ${len}. Tryck ”Exportera igen” för att få en ny fil.`
+    :blob?`Exporterad fil · ${(blob.size/1e6).toFixed(2)} MB · ${len}`
+    :`Förhandsvisning ur källan · ${len}${c.freeze?" (frysrutan visas inte)":""}. Exportera igen för att få filen.`;
+}
+/* Byt till uppspelning ur källan, så att trimningen syns direkt. */
+function recToSrc(){
+  if(REC.mode==="src") return; const k=recFrame(); REC.mode="src";
+  if(S.urls.res){ URL.revokeObjectURL(S.urls.res); S.urls.res=null; }
+  rv.src=S.urls.vid; rv.onloadedmetadata=()=>recSeek(Math.max(0,Math.min(recLen(REC.clip)-1,k)));
+}
+function trimDone(c,inChanged){
+  c.inTc=srcTc(c.inF); c.outTc=srcTc(c.outF); c.changed=true; S.blobs.delete(c.name);
+  if(inChanged){ delete c.thumb; thumbFailed.delete(c.name); }
+  saveStore(); recInfo(); recUi(); renderClips(); tlDrawOver();
+}
+function recStep(d){
+  if(!REC.clip) return; rv.pause();
+  const total=recLen(REC.clip)+(REC.mode==="blob"?Math.round((REC.clip.freeze||0)*S.fps):0);
+  recSeek(Math.max(0,Math.min(total-1,recFrame()+d)));
+}
+function recTrim(which){
+  const c=REC.clip; if(!c) return; const k=Math.max(0,Math.min(recLen(c)-1,recFrame()));
+  const was={inF:c.inF,outF:c.outF}; recToSrc();
+  if(which==="in"){ c.inF+=k; } else { c.outF=c.inF+k; }
+  if(c.inF!==was.inF||c.outF!==was.outF){ trimDone(c,c.inF!==was.inF); if(which==="in") recSeek(0); }
+}
+function reexport(c){
+  S.inF=c.inF; S.outF=c.outF; $("freeze").value=c.freeze||0; $("outName").value=c.name; checkName(); updateUi(); exportClip();
+}
+/* Den aktiva bildskärmen styr tangenterna och vad tidslinjen visar. */
+function setActive(m){
+  if(m==="rec"&&!REC.clip) m="src";
+  if(S.active===m) return;
+  TL["saved_"+S.active]=TL.view; S.active=m;
+  $("monSrc").classList.toggle("active",m==="src"); $("monRec").classList.toggle("active",m==="rec");
+  $("tlMode").textContent=m==="rec"?`Klipp: ${REC.clip.name} · dra i IN/UT för att trimma`:"Källa: hela avsnittet";
+  if(m==="rec") tlFitClip(); else if(TL.saved_src) tlSetView(TL.saved_src.start,TL.saved_src.span);
+  tlDrawOver(); updateUi();
+}
+$("monSrc").addEventListener("pointerdown",()=>setActive("src"));
+$("monRec").addEventListener("pointerdown",()=>setActive("rec"));
+$("rReexport").onclick=()=>REC.clip&&reexport(REC.clip);
 function clearRec(){
-  rv.pause(); rv.removeAttribute("src"); rv.load(); REC.mode=REC.clip=null;
+  rv.pause(); rv.removeAttribute("src"); rv.load(); REC.mode=REC.clip=null; setActive("src"); $("rReexport").hidden=true;
   if(S.urls.res){ URL.revokeObjectURL(S.urls.res); S.urls.res=null; }
   $("recEmpty").hidden=false; $("rPlay").disabled=$("rStart").disabled=true; $("bDownload").hidden=true;
   $("rtc").textContent="--:--:--:--"; $("recPos").textContent="–"; $("recName").textContent=""; $("recInfo").textContent="";
@@ -3781,11 +3856,12 @@ function recPlay(){
 function recTick(){
   if(rv.paused||!REC.clip) return;
   if(REC.mode==="src"&&recFrame()>=recLen(REC.clip)){ rv.pause(); recSeek(recLen(REC.clip)-1); }
-  recUi(); requestAnimationFrame(recTick);
+  recUi(); if(S.active==="rec"){ const t=(REC.clip.inF+recFrame())/S.fps, v=TL.view; if(t<v.start||t>v.start+v.span*0.95) tlSetView(t-v.span*0.05,v.span); tlDrawOver(); }
+  requestAnimationFrame(recTick);
 }
 rv.addEventListener("play",()=>{ $("rPlay").textContent="Paus"; recTick(); });
 rv.addEventListener("pause",()=>{ $("rPlay").textContent="Spela"; recUi(); });
-rv.addEventListener("seeked",recUi);
+rv.addEventListener("seeked",()=>{ recUi(); if(S.active==="rec") tlDrawOver(); });
 rv.addEventListener("click",recPlay);
 $("rPlay").onclick=recPlay; $("rStart").onclick=()=>{ rv.pause(); recSeek(0); };
 
@@ -3797,10 +3873,10 @@ function updateUi(){
   $("tcframe").textContent="bildruta "+curF;
   const pct=f=>(100*f/Math.max(1,S.totalFrames-1))+"%";
   $("tlh").style.left=pct(curF);
-  const hasR=S.inF!=null&&S.outF!=null;
-  $("tlr").hidden=!hasR;
-  if(hasR){ $("tlr").style.left=pct(S.inF); $("tlr").style.width=`calc(${pct(S.outF+1-S.inF)} )`; }
-  if(!vid.paused){ const t=curF/S.fps, v=TL.view; if(t<v.start||t>v.start+v.span*0.95) tlSetView(t-v.span*0.05,v.span); }
+  const hasR=S.inF!=null&&S.outF!=null, mk=marks(), hasM=mk.inF!=null&&mk.outF!=null;
+  $("tlr").hidden=!hasM;
+  if(hasM){ $("tlr").style.left=pct(mk.inF); $("tlr").style.width=`calc(${pct(mk.outF+1-mk.inF)} )`; }
+  if(!vid.paused&&S.active==="src"){ const t=curF/S.fps, v=TL.view; if(t<v.start||t>v.start+v.span*0.95) tlSetView(t-v.span*0.05,v.span); }
   tlDrawOver();
   if(document.activeElement!==$("inTc")) $("inTc").value=S.inF!=null?srcTc(S.inF):"";
   if(document.activeElement!==$("outTc")) $("outTc").value=S.outF!=null?srcTc(S.outF):"";
@@ -4020,10 +4096,13 @@ function renderClips(){
       <div class="acts"><button data-a="load" title="Lägg IN och UT i källan">Till källan</button>${S.blobs.has(c.name)?'<button data-a="dl">Ladda ner</button>':""}<button data-a="del" aria-label="Ta bort ur bin">✕</button></div>`;
     const img=d.querySelector("img"); if(c.thumb) img.src=c.thumb; else { img.removeAttribute("src"); ensureClipThumb(c); }
     d.querySelector("b").textContent=c.name; d.querySelector("b").title=c.name;
-    d.querySelector('[data-k="tc"]').textContent=`${c.inTc} → ${c.outTc}`;
+    d.querySelector('[data-k="tc"]').textContent=`IN ${c.inTc}\nUT ${c.outTc}`;
     d.querySelector('[data-k="len"]').textContent=`${(recLen(c)/S.fps).toFixed(2)} s${c.freeze?` + frys ${c.freeze} s`:""}`;
-    d.onclick=e=>{ if(!e.target.closest("button")) recShow(c); };
-    d.onkeydown=e=>{ if((e.key==="Enter"||e.key===" ")&&e.target===d){ e.preventDefault(); recShow(c); } };
+    if(c.changed){ const t=document.createElement("span"); t.className="chg"; t.textContent="Ändrat, exportera igen"; d.querySelector(".meta").appendChild(t);
+      const rb=document.createElement("button"); rb.textContent="Exportera igen"; rb.onclick=()=>reexport(c); d.querySelector(".acts").insertBefore(rb,d.querySelector('[data-a="del"]')); }
+    const pick=()=>{ recShow(c); setActive("rec"); };
+    d.onclick=e=>{ if(!e.target.closest("button")) pick(); };
+    d.onkeydown=e=>{ if((e.key==="Enter"||e.key===" ")&&e.target===d){ e.preventDefault(); pick(); } };
     d.querySelector('[data-a="load"]').onclick=()=>{ S.inF=c.inF; S.outF=c.outF; $("freeze").value=c.freeze||0; $("outName").value=c.name; checkName(); seekFrame(c.inF); saveStore(); };
     const dl=d.querySelector('[data-a="dl"]'); if(dl) dl.onclick=()=>download(c.name);
     d.querySelector('[data-a="del"]').onclick=()=>{ S.clips.splice(i,1); S.blobs.delete(c.name);
@@ -4104,6 +4183,17 @@ $("bAutoName").onclick=()=>{ $("outName").value=""; suggestName(); $("outName").
 document.addEventListener("keydown",e=>{
   if(e.target.closest("input,textarea,select")||e.metaKey||e.ctrlKey||e.altKey) return;
   const k=e.key;
+  if(S.active==="rec"&&REC.clip){
+    if(k===" "){ e.preventDefault(); recPlay(); }
+    else if(k==="ArrowLeft"){ e.preventDefault(); recStep(e.shiftKey?-fpsInt():-1); }
+    else if(k==="ArrowRight"){ e.preventDefault(); recStep(e.shiftKey?fpsInt():1); }
+    else if(k==="i"||k==="I") recTrim("in");
+    else if(k==="o"||k==="O") recTrim("out");
+    else if(k==="p"||k==="P"){ rv.pause(); recSeek(0); rv.addEventListener("seeked",()=>rv.play(),{once:true}); }
+    else if(k==="+"||k==="=") tlZoom(0.5);
+    else if(k==="-"||k==="_") tlZoom(2);
+    return;
+  }
   if(k===" "){ e.preventDefault(); togglePlay(); }
   else if(k==="ArrowLeft"){ e.preventDefault(); step(e.shiftKey?-fpsInt():-1); }
   else if(k==="ArrowRight"){ e.preventDefault(); step(e.shiftKey?fpsInt():1); }
