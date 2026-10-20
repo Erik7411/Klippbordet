@@ -180,7 +180,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <h2 id="h-inst">Inställningar</h2>
         <div class="grid2">
           <div class="field"><label for="startTc">Filens starttidkod</label><input id="startTc" class="tcin" value="01:00:00:00"></div>
-          <div class="field"><label for="prefix">Prefix för filnamn</label><input id="prefix" class="tcin" value="gvfo"></div>
+          <div class="field"><label for="prefix">Prefix för filnamn</label><input id="prefix" class="tcin" value="" placeholder="inget"></div>
         </div>
         <div class="field"><label for="audioMap">Ljud i exporten (när källan har fler än två kanaler)</label>
           <select id="audioMap">
@@ -3505,10 +3505,11 @@ function setStatus(t,cls){ $("status").textContent=t; $("status").className=cls|
 
 /* ---------- export ---------- */
 function suggestName(){
-  const pre=($("prefix").value||"klipp").trim();
+  const pre=$("prefix").value.trim();
   const ep=S.ep!=null?pad(S.ep):"";
+  const head=(pre||ep)?`${pre}${ep}_`:"";
   let n=1; const names=new Set(S.clips.map(c=>c.name));
-  let nm; do{ nm=`${pre}${ep}_klipp${pad(n)}.mp4`; n++; }while(names.has(nm));
+  let nm; do{ nm=`${head}klipp${pad(n)}.mp4`; n++; }while(names.has(nm));
   $("outName").placeholder=nm; checkName();
 }
 function cleanName(raw){
@@ -3658,12 +3659,12 @@ function saveStill(){
 
 /* ---------- lagring per fil ---------- */
 const key=()=>S.file?"klippbordet:"+S.file.name+":"+S.file.size:null;
-function saveStore(){ try{ if(key()) localStorage.setItem(key(),JSON.stringify({clips:S.clips,qs:S.qs,inF:S.inF,outF:S.outF})); localStorage.setItem("klippbordet:prefix",$("prefix").value); }catch(_){} }
+function saveStore(){ try{ if(key()) localStorage.setItem(key(),JSON.stringify({clips:S.clips,qs:S.qs,inF:S.inF,outF:S.outF})); localStorage.setItem("klippbordet:prefix2",$("prefix").value); }catch(_){} }
 function loadStore(){
   S.clips=[]; S.qs=[];
   try{ const d=JSON.parse(localStorage.getItem(key())||"null"); if(d){ S.clips=d.clips||[]; S.qs=d.qs||[]; S.inF=d.inF??null; S.outF=d.outF??null; } }catch(_){}
 }
-try{ const p=localStorage.getItem("klippbordet:prefix"); if(p) $("prefix").value=p; }catch(_){}
+try{ const p=localStorage.getItem("klippbordet:prefix2"); if(p) $("prefix").value=p; }catch(_){}
 
 /* ---------- klipplista ---------- */
 function renderClips(){
