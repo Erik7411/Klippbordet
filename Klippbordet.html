@@ -182,6 +182,13 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
           <div class="field"><label for="startTc">Filens starttidkod</label><input id="startTc" class="tcin" value="01:00:00:00"></div>
           <div class="field"><label for="prefix">Prefix för filnamn</label><input id="prefix" class="tcin" value="gvfo"></div>
         </div>
+        <div class="field"><label for="audioMap">Ljud i exporten (när källan har fler än två kanaler)</label>
+          <select id="audioMap">
+            <option value="12">A1 + A2 som stereo</option>
+            <option value="34">A3 + A4 som stereo</option>
+            <option value="mix">Mixa alla kanaler till stereo</option>
+          </select>
+        </div>
         <p class="note" id="fpsNote">Bildfrekvens: –</p>
         <p class="note" id="codecNote"></p>
       </section>
@@ -3584,15 +3591,25 @@ async function exportClip(){
     if(aSrc){
       setStatus("Kodar ljud…");
       const aSink=new M.AudioSampleSink(at);
-      let rate=48000, ch=2, outPos=0; // i ljudrutor
-      const clipLen=Math.round((t1-t0)*48000);
+      let rate=48000, ch=2, outPos=0; // i ljudrutor; ch = antal kanaler i exporten (högst 2)
+      const map=$("audioMap").value;
       for await (const s of aSink.samples(Math.max(0,t0-0.1), t1)){
-        rate=s.sampleRate; ch=s.numberOfChannels;
+        rate=s.sampleRate; const srcCh=s.numberOfChannels; ch=Math.min(2,srcCh);
         const sStart=s.timestamp, n=s.numberOfFrames;
         const a=Math.max(0,Math.round((t0-sStart)*rate)), b=Math.min(n,Math.round((t1-sStart)*rate));
         if(b<=a){ s.close(); continue; }
         const len=b-a; const data=new Float32Array(len*ch);
-        for(let c=0;c<ch;c++){ const tmp=new Float32Array(n); s.copyTo(tmp,{planeIndex:c,format:"f32-planar"}); data.set(tmp.subarray(a,b),c*len); }
+        const plane=c=>{ const tmp=new Float32Array(n); s.copyTo(tmp,{planeIndex:c,format:"f32-planar"}); return tmp.subarray(a,b); };
+        if(srcCh<=2){
+          for(let c=0;c<ch;c++) data.set(plane(c),c*len);
+        } else if(map==="mix"){
+          // Udda kanaler (A1, A3 …) till vänster, jämna (A2, A4 …) till höger, med sänkt nivå så att summan inte klipper
+          const nL=Math.ceil(srcCh/2), nR=Math.floor(srcCh/2);
+          for(let c=0;c<srcCh;c++){ const p=plane(c), off=(c%2)*len, g=1/(c%2?nR:nL); for(let i=0;i<len;i++) data[off+i]+=p[i]*g; }
+        } else {
+          const first=map==="34"?2:0;
+          data.set(plane(Math.min(first,srcCh-1)),0); data.set(plane(Math.min(first+1,srcCh-1)),len);
+        }
         const ts=(sStart+a/rate)-t0;
         { const as=new M.AudioSample({data,format:"f32-planar",numberOfChannels:ch,sampleRate:rate,timestamp:Math.max(0,ts)}); await aSrc.add(as); as.close(); }
         outPos=Math.max(outPos,Math.round((Math.max(0,ts))*rate)+len);
