@@ -33,7 +33,7 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px}
 .brand{font-weight:700;font-size:17px;letter-spacing:.01em}
 .brand small{display:block;font-weight:500;font-size:12px;color:var(--muted);letter-spacing:.02em}
 .filename{font:12px var(--f-tc);color:var(--muted);min-width:0;overflow-wrap:anywhere;flex:1 1 220px}
-.main{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:14px;align-items:start}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px;align-items:start}
 @media (max-width:1050px){.main{grid-template-columns:minmax(0,1fr)}}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;display:grid;gap:12px;min-width:0}
 .panel h2{margin:0;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
@@ -87,6 +87,30 @@ pre.json{margin:0;font:11.5px/1.45 var(--f-tc);background:var(--raise);border:1p
 .sep{height:1px;background:var(--line)}
 details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 .keys{font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px}
+.monitors{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+@media (max-width:700px){.monitors{grid-template-columns:minmax(0,1fr)}}
+.mon{display:grid;gap:6px;min-width:0;align-content:start}
+.monhead{display:flex;align-items:baseline;justify-content:space-between;gap:4px 10px;flex-wrap:wrap}
+.monlabel{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
+.mon .tc{font-size:22px}
+.screen .empty{position:absolute;inset:0;display:grid;place-items:center;color:#8e9a9c;font-size:13px;text-align:center;padding:16px}
+.tlbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.tlbar h2{margin-right:auto}
+.tlbar button{min-height:30px;padding:4px 9px;font-size:12px}
+.tlwrap{position:relative;touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer;border-radius:5px;overflow:hidden;border:1px solid var(--line)}
+.tlwrap canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+.timeline .win{position:absolute;top:0;bottom:0;border:1px solid var(--fg);border-radius:3px;background:color-mix(in srgb,var(--fg) 8%,transparent);pointer-events:none;min-width:3px}
+.bin{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.card{background:var(--raise);border:1px solid var(--line);border-radius:6px;overflow:hidden;display:grid;align-content:start;cursor:pointer;min-width:0}
+.card:hover{border-color:var(--muted)}
+.card.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.card .th{aspect-ratio:16/9;background:#000;display:block;width:100%;object-fit:contain}
+.card .meta{padding:7px 8px 4px;display:grid;gap:2px;min-width:0}
+.card b{font:600 12px var(--f-tc);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card span{font:11px var(--f-tc);color:var(--muted)}
+.card .acts{display:flex;gap:4px;padding:4px 8px 8px}
+.card .acts button{min-height:28px;padding:3px 7px;font-size:11.5px;white-space:nowrap}
+.card .acts [data-a="del"]{margin-left:auto}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
@@ -95,30 +119,35 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
   <header class="top">
     <div class="brand">Klippbordet<small>Klipp till Quiz i Play</small></div>
     <label class="btn" for="file" style="display:inline-flex;align-items:center">Öppna avsnitt…</label>
-    <input id="file" type="file" accept="video/*,.mp4,.mov,.m4v,.mxf" hidden>
+    <input id="file" type="file" accept="video/*,.mp4,.mov,.m4v" hidden>
     <div class="filename" id="fname">Ingen fil öppnad</div>
   </header>
 
   <div class="main">
     <section class="stage">
-      <div class="screen" id="screen">
-        <video id="vid" playsinline preload="auto"></video>
-        <div class="drop" id="drop"><div><strong>Dra in en avsnittsfil hit</strong><p>eller välj ”Öppna avsnitt”. Filen stannar på datorn och laddas inte upp någonstans.</p></div></div>
-      </div>
-
-      <div class="tcrow">
-        <div class="tc" id="tc">--:--:--:--</div>
-        <div class="tcsub" id="tcrel">från filstart --:--:--</div>
-        <div class="tcsub" id="tcframe">bildruta –</div>
-      </div>
-
-      <div>
-        <div class="timeline" id="tl" aria-label="Hela avsnittet"><div class="range" id="tlr" hidden></div><div class="head" id="tlh"></div></div>
-        <div class="label-row"><span id="tl0">00:00</span><span>hela avsnittet</span><span id="tl1">--:--</span></div>
-      </div>
-      <div>
-        <div class="timeline zoomline" id="zl" aria-label="Närbild runt klippet"><div class="range" id="zlr" hidden></div><div class="head" id="zlh"></div></div>
-        <div class="label-row"><span id="zl0">–</span><span>närbild, 30 sekunder</span><span id="zl1">–</span></div>
+      <div class="monitors">
+        <section class="mon" aria-label="Källa">
+          <div class="monhead"><span class="monlabel">Källa</span><span class="tc" id="tc">--:--:--:--</span></div>
+          <div class="screen" id="screen">
+            <video id="vid" playsinline preload="auto"></video>
+            <div class="drop" id="drop"><div><strong>Dra in en avsnittsfil hit</strong><p>eller välj ”Öppna avsnitt”. Filen stannar på datorn och laddas inte upp någonstans.</p></div></div>
+          </div>
+          <div class="tcrow"><span class="tcsub" id="tcrel">från filstart --:--:--</span><span class="tcsub" id="tcframe">bildruta –</span></div>
+        </section>
+        <section class="mon" aria-label="Klipp">
+          <div class="monhead"><span class="monlabel">Klipp</span><span class="tc" id="rtc">--:--:--:--</span></div>
+          <div class="screen">
+            <video id="resVid" playsinline preload="auto"></video>
+            <div class="empty" id="recEmpty">Exportera ett klipp eller välj ett i bin.</div>
+          </div>
+          <div class="tcrow"><span class="tcsub" id="recPos">–</span><span class="tcsub" id="recName"></span></div>
+          <div class="transport">
+            <button id="rStart" disabled>Till början</button>
+            <button id="rPlay" class="primary" disabled style="min-width:92px">Spela</button>
+            <button id="bDownload" hidden>Ladda ner</button>
+          </div>
+          <p class="note" id="recInfo"></p>
+        </section>
       </div>
 
       <div class="transport">
@@ -136,7 +165,27 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <input id="goto" class="tcin" placeholder="Gå till tidkod, t.ex. 01:17:19:17 eller 05:03:22" style="max-width:360px">
         <button id="bGoto">Gå</button>
       </div>
-      <div class="keys"><span><kbd>Mellanslag</kbd> spela/paus</span><span><kbd>←</kbd><kbd>→</kbd> en ruta</span><span><kbd>Shift</kbd>+pil en sekund</span><span><kbd>I</kbd><kbd>O</kbd> in/ut</span><span><kbd>P</kbd> spela klippet</span></div>
+
+      <section class="panel" aria-labelledby="h-tl">
+        <div class="tlbar">
+          <h2 id="h-tl">Tidslinje</h2>
+          <span class="note" id="waveNote"></span>
+          <button id="zOut" title="Minus">−</button><button id="zIn" title="Plus">+</button>
+          <button id="zFit">Hela</button><button id="zClip">Klippet</button>
+        </div>
+        <div>
+          <div class="timeline" id="tl" aria-label="Hela avsnittet" style="height:18px"><div class="win" id="tlw" hidden></div><div class="range" id="tlr" hidden></div><div class="head" id="tlh"></div></div>
+          <div class="label-row"><span id="tl0">00:00</span><span>hela avsnittet</span><span id="tl1">--:--</span></div>
+        </div>
+        <div class="tlwrap" id="tlc" style="height:76px" aria-label="Tidslinje med spår"><canvas id="tlBase"></canvas><canvas id="tlOver"></canvas></div>
+        <div class="keys"><span><kbd>Mellanslag</kbd> spela/paus</span><span><kbd>←</kbd><kbd>→</kbd> en ruta</span><span><kbd>Shift</kbd>+pil en sekund</span><span><kbd>I</kbd><kbd>O</kbd> in/ut</span><span><kbd>P</kbd> spela klippet</span><span><kbd>+</kbd><kbd>−</kbd> zooma</span><span><kbd>Ctrl</kbd>/<kbd>⌘</kbd>+hjul zooma, sidledes hjul panorera</span><span>Dra i IN/UT på tidslinjen för att flytta dem</span></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-bin">
+        <h2 id="h-bin">Bin</h2>
+        <div class="bin" id="clips"></div>
+        <p class="note" id="clipsEmpty">Inga klipp ännu. Bin sparas per avsnittsfil i den här webbläsaren.</p>
+      </section>
     </section>
 
     <aside class="stage">
@@ -155,16 +204,8 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <button id="bExport" class="primary" disabled>Exportera klipp</button>
         <div class="progress" id="prog" hidden><i id="progBar"></i></div>
         <p class="note" id="status"></p>
-        <div class="result" id="result" hidden>
-          <video id="resVid" controls playsinline></video>
-          <div class="row"><button id="bDownload" class="primary">Ladda ner</button><span class="note" id="resInfo"></span></div>
-        </div>
-      </section>
-
-      <section class="panel" aria-labelledby="h-lista">
-        <h2 id="h-lista">Exporterade klipp</h2>
-        <ul class="clips" id="clips"></ul>
-        <p class="note" id="clipsEmpty">Inga klipp ännu. Listan sparas per avsnittsfil i den här webbläsaren.</p>
+        <div class="note" id="convHint" hidden>Konvertera med ffmpeg (tidkoden följer med):
+          <pre class="json" id="convCmd" style="margin-top:6px;user-select:all">ffmpeg -i avsnitt.mxf -c:v libx264 -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k avsnitt.mp4</pre></div>
       </section>
 
       <section class="panel" aria-labelledby="h-fragor">
@@ -3332,17 +3373,25 @@ const $ = id => document.getElementById(id);
 const vid = $("vid");
 const S = {
   file:null, fps:25, startTcFrames:90000, totalFrames:0, dur:0,
-  inF:null, outF:null, playingClip:false, lastBlob:null, lastName:"",
-  clips:[], qs:[], ep:null
+  inF:null, outF:null, playingClip:false, blobs:new Map(),
+  clips:[], qs:[], ep:null, df:false, urls:{}, noExport:null
 };
 
 /* ---------- tidkod ---------- */
 const pad=(n,l=2)=>String(n).padStart(l,"0");
 function fpsInt(){return Math.round(S.fps)}
-function framesToTc(f){ // HH:MM:SS:FF
+/* Drop frame (29,97 och 59,94): bildrutenummer 0 och 1 (0–3 vid 59,94) hoppas över
+   varje minut utom var tionde. Rutorna räknas ändå i följd, det är bara etiketten som hoppar. */
+const dfDrop=()=>fpsInt()/15; // 2 vid 30, 4 vid 60
+function framesToTc(f){ // HH:MM:SS:FF, eller HH:MM:SS;FF vid drop frame
   const r=fpsInt(); if(f<0) f=0;
+  if(S.df){
+    const d=dfDrop(), per10=r*600-d*9, perMin=r*60-d;
+    const D=Math.floor(f/per10), M=f%per10;
+    f+=d*9*D+(M<d?0:d*Math.floor((M-d)/perMin));
+  }
   const ff=f%r, s=Math.floor(f/r), ss=s%60, m=Math.floor(s/60), mm=m%60, hh=Math.floor(m/60);
-  return `${pad(hh)}:${pad(mm)}:${pad(ss)}:${pad(ff)}`;
+  return `${pad(hh)}:${pad(mm)}:${pad(ss)}${S.df?";":":"}${pad(ff)}`;
 }
 function framesToRel(f){ // MM:SS:FF från filstart
   const r=fpsInt(); const ff=f%r, s=Math.floor(f/r);
@@ -3350,7 +3399,9 @@ function framesToRel(f){ // MM:SS:FF från filstart
 }
 function tcToFrames(str){ // HH:MM:SS:FF → absoluta rutor
   const p=str.trim().split(/[:;.]/).map(Number); if(p.length!==4||p.some(isNaN)) return null;
-  return ((p[0]*60+p[1])*60+p[2])*fpsInt()+p[3];
+  let f=((p[0]*60+p[1])*60+p[2])*fpsInt()+p[3];
+  if(S.df){ const mins=p[0]*60+p[1]; f-=dfDrop()*(mins-Math.floor(mins/10)); }
+  return f;
 }
 /* Tolkar inmatning till rutnummer i filen (0 = första rutan). */
 function parseInput(str){
@@ -3365,40 +3416,72 @@ function parseInput(str){
 const srcTc=f=>framesToTc(f+S.startTcFrames);
 
 /* ---------- fil ---------- */
+let openSeq=0;
 async function openFile(file){
   if(!file) return;
+  const seq=++openSeq;
+  vid.pause(); vid.removeAttribute("src"); vid.load(); S.dur=0; S.totalFrames=0; curF=0;
   S.file=file; $("fname").textContent=file.name; $("drop").hidden=true;
-  vid.src=URL.createObjectURL(file);
-  S.inF=S.outF=null; $("result").hidden=true; setStatus("");
+  S.inF=S.outF=null; setStatus(""); $("bExport").disabled=true;
+  S.noExport=null; $("convHint").hidden=true;
+  clearRec(); S.blobs=new Map(); S.df=false; tlReset();
   const m=file.name.match(/-(\d{3})[A-Z]?-/); S.ep=m?parseInt(m[1],10):null;
-  try{
-    const tc=await readMp4Timecode(file);
-    if(tc){ S.startTcFrames=tcToFrames(tc)??90000; $("startTc").value=tc; $("startTc").dataset.src="fil"; }
-    else { $("startTc").dataset.src="antagen"; }
-  }catch(e){ $("startTc").dataset.src="antagen"; }
+  // Bildfrekvensen måste vara känd innan tidkod och antal rutor räknas fram.
+  S.fps=25;
   try{
     const input=new M.Input({source:new M.BlobSource(file),formats:M.ALL_FORMATS});
     const vt=await input.getPrimaryVideoTrack();
     if(vt){ const st=await vt.computePacketStats(100); if(st&&st.averagePacketRate>1) S.fps=Math.round(st.averagePacketRate*100)/100; }
     const at=await input.getPrimaryAudioTrack();
     let notes=[];
-    if(vt && !(await vt.canDecode())) notes.push(`Webbläsaren kan inte avkoda filens video (${vt.codec}).`);
-    if(at && !(await at.canDecode())) notes.push(`Webbläsaren kan inte avkoda filens ljud (${at.codec}).`);
+    if(!vt) S.noExport="Filen saknar videospår.";
+    else if(!(await vt.canDecode())) S.noExport=`Webbläsaren kan inte avkoda filens video (${codecName(vt.codec)}).`;
+    if(at && !(await at.canDecode())) notes.push(`Webbläsaren kan inte avkoda filens ljud (${codecName(at.codec)}), så klippen exporteras utan ljud.`);
     if(!at) notes.push("Filen saknar ljudspår.");
     $("codecNote").textContent=notes.join(" ");
     $("codecNote").className=notes.length?"warn":"note";
-  }catch(e){ $("codecNote").textContent="Kunde inte läsa filens spår: "+e.message; $("codecNote").className="err"; }
-  $("fpsNote").textContent=`Bildfrekvens: ${S.fps} rutor/s · starttidkod ${$("startTc").value} (${$("startTc").dataset.src==="fil"?"läst ur filen":"antagen, kontrollera"})`;
+  }catch(e){ $("codecNote").textContent=""; S.noExport=/unsupported|unrecognizable/i.test(e.message)?"Filformatet stöds inte.":"Filen kunde inte läsas: "+e.message; }
+  if(S.noExport) showNoExport();
+  if(seq!==openSeq) return;
+  let r=null;
+  try{ r=await readMp4Timecode(file); }catch(e){}
+  if(seq!==openSeq) return;
+  // Drop frame är bara definierat för 29,97 och 59,94 rutor/s.
+  const dfOk=(fpsInt()===30||fpsInt()===60)&&Math.abs(S.fps-fpsInt())>0.01;
+  S.df=!!(r&&r.dropFrame&&dfOk);
+  if(r&&r.dropFrame&&!dfOk){ $("codecNote").textContent=($("codecNote").textContent+` Filen anger drop frame-tidkod men har ${S.fps} rutor/s. Tidkoden räknas utan drop frame.`).trim(); $("codecNote").className="warn"; }
+  if(r){
+    let tc;
+    if(S.df) tc=framesToTc(r.count);
+    else { const ff=r.count%r.nFrames, s=Math.floor(r.count/r.nFrames); tc=`${pad(Math.floor(s/3600))}:${pad(Math.floor(s/60)%60)}:${pad(s%60)}:${pad(ff)}`; }
+    $("startTc").value=tc; $("startTc").dataset.src="fil";
+  } else { $("startTc").value="01:00:00:00"; $("startTc").dataset.src="antagen"; }
+  S.startTcFrames=tcToFrames($("startTc").value)??tcToFrames("01:00:00:00");
+  $("fpsNote").textContent=`Bildfrekvens: ${S.fps} rutor/s${S.df?" (drop frame)":""} · starttidkod ${$("startTc").value} (${$("startTc").dataset.src==="fil"?"läst ur filen":"antagen, kontrollera"})`;
   loadStore(); suggestName(); renderAll();
+  vid.src=setUrl("vid",file);
 }
 vid.addEventListener("loadedmetadata",()=>{
   S.dur=vid.duration; S.totalFrames=Math.floor(S.dur*S.fps+1e-6);
-  $("tl1").textContent=fmtMin(S.dur); seekFrame(0); $("bExport").disabled=true; updateUi();
+  $("tl1").textContent=fmtMin(S.dur); TL.view={start:0,span:S.dur}; seekFrame(0); $("bExport").disabled=true; updateUi(); tlSetup();
 });
-vid.addEventListener("error",()=>setStatus("Webbläsaren kan inte spela upp filen. Prova Chrome på datorn.","err"));
+vid.addEventListener("error",()=>{ if(!vid.getAttribute("src")) return; if(S.noExport) return showNoExport();
+  setStatus("Webbläsaren kan inte spela upp filen. Klippbordet klarar MP4, MOV, MKV och WebM med H.264, VP9 eller AV1.","err"); showConvHint(); });
+const CODEC_NAMES={avc:"H.264",hevc:"H.265/HEVC",vp8:"VP8",vp9:"VP9",av1:"AV1",prores:"ProRes",aac:"AAC",opus:"Opus",mp3:"MP3",flac:"FLAC",ac3:"AC-3",eac3:"E-AC-3"};
+const codecName=c=>c==null?"okänd kodek, till exempel MPEG-2/XDCAM eller DNxHD":(CODEC_NAMES[c]||c);
+function showConvHint(){
+  const n=S.file?S.file.name:"avsnitt.mxf", q=x=>`"${x.replace(/"/g,'\\"')}"`;
+  $("convCmd").textContent=`ffmpeg -i ${q(n)} -c:v libx264 -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k ${q(n.replace(/\.[^.]+$/,"")+"_h264.mp4")}`;
+  $("convHint").hidden=false;
+}
+/* Filen kan inte klippas: säg det direkt när den öppnas i stället för först vid export. */
+function showNoExport(){
+  setStatus(S.noExport+" Klipp kan inte exporteras från den här filen. Gör först en H.264-kopia i MP4, se nedan.","err");
+  showConvHint(); $("bExport").disabled=true;
+}
 const fmtMin=s=>`${pad(Math.floor(s/60))}:${pad(Math.floor(s%60))}`;
 
-/* Läser starttidkoden ur MP4/MOV (tmcd-spår). Returnerar "HH:MM:SS:FF" eller null. */
+/* Läser starttidkoden ur MP4/MOV (tmcd-spår). Returnerar {count, nFrames, dropFrame} eller null. */
 async function readMp4Timecode(file){
   const rd=async(o,n)=>new DataView(await file.slice(o,o+n).arrayBuffer());
   const type=dv=>String.fromCharCode(dv.getUint8(4),dv.getUint8(5),dv.getUint8(6),dv.getUint8(7));
@@ -3421,12 +3504,10 @@ async function readMp4Timecode(file){
     if(ht!=="tmcd") continue;
     const minf=find(mk,"minf"); const stbl=minf&&find(kids(minf.b,minf.e),"stbl"); if(!stbl) continue;
     const sk=kids(stbl.b,stbl.e); const stsd=find(sk,"stsd"); const stco=find(sk,"stco")||find(sk,"co64"); if(!stsd||!stco) continue;
-    const ent=stsd.b+8; const nFrames=buf.getUint8(ent+32)||25; const flags=buf.getUint32(ent+16);
+    const ent=stsd.b+8; const nFrames=buf.getUint8(ent+32)||25; const flags=buf.getUint32(ent+20);
     const first=stco.t==="co64"?Number(buf.getBigUint64(stco.b+8)):buf.getUint32(stco.b+8);
     const cnt=(await rd(first,4)).getUint32(0);
-    if(flags&1) return null; // drop frame stöds inte här
-    const ff=cnt%nFrames, s=Math.floor(cnt/nFrames);
-    return `${pad(Math.floor(s/3600))}:${pad(Math.floor(s/60)%60)}:${pad(s%60)}:${pad(ff)}`;
+    return {count:cnt, nFrames, dropFrame:!!(flags&1)};
   }
   return null;
 }
@@ -3434,10 +3515,10 @@ async function readMp4Timecode(file){
 /* ---------- uppspelning ---------- */
 let curF=0;
 function frameFromTime(t){return Math.floor(t*S.fps+1e-3)}
-function seekFrame(f){
+function seekFrame(f,reveal=true){
   if(!S.dur) return;
   f=Math.max(0,Math.min(S.totalFrames-1,f)); curF=f;
-  vid.currentTime=(f+0.25)/S.fps; updateUi();
+  vid.currentTime=(f+0.25)/S.fps; if(reveal) tlReveal(f/S.fps); updateUi();
 }
 function step(n){ if(!vid.paused) vid.pause(); seekFrame(curF+n); }
 function togglePlay(){ if(!S.dur) return; S.playingClip=false; vid.paused?vid.play():vid.pause(); }
@@ -3466,10 +3547,254 @@ function bindLine(el,toFrame){
   el.addEventListener("pointerup",()=>{ el.onpointermove=null; });
 }
 bindLine($("tl"),x=>Math.round(x*(S.totalFrames-1)));
-const zoomSpan=()=>Math.round(30*S.fps);
-function zoomStart(){ const c=(S.inF!=null&&S.outF!=null)?Math.round((S.inF+S.outF)/2):curF; return Math.max(0,Math.min(Math.max(0,S.totalFrames-zoomSpan()),c-Math.round(zoomSpan()/2))); }
-let zStart=0;
-bindLine($("zl"),x=>zStart+Math.round(x*zoomSpan()));
+
+/* ---------- tidslinje med spår ----------
+   Två lager: tlBase (linjal, miniatyrer, vågform) ritas bara när vyn eller data ändras,
+   tlOver (IN/UT och spelhuvud) ritas vid varje uppdatering. */
+const TL={view:{start:0,span:1},seq:0,input:null,sink:null,binSink:null,thumbs:new Map(),keys:[],want:[],busy:false,
+  peaks:null,peakRate:100,peakEnd:0,ch:0,col:{},w:0,h:0,dpr:1,dirty:false};
+const G=46, RULER=32, VH=54, AH=30, MAXCH=8, FONT_TC='"Martian Mono",ui-monospace,Menlo,Consolas,monospace';
+const tlEl=$("tlc"), cBase=$("tlBase"), cOver=$("tlOver");
+function tlColors(){ const cs=getComputedStyle(document.documentElement); for(const k of ["bg","panel","raise","line","fg","muted","accent","in","out"]) TL.col[k]=cs.getPropertyValue("--"+k).trim(); }
+tlColors();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{ tlColors(); tlDirty(); tlDrawOver(); });
+function tlResize(){
+  const w=tlEl.clientWidth, h=RULER+VH+Math.min(TL.ch,MAXCH)*AH;
+  tlEl.style.height=h+"px";
+  const dpr=window.devicePixelRatio||1; TL.w=w; TL.h=h; TL.dpr=dpr;
+  for(const c of [cBase,cOver]){ c.width=Math.max(1,Math.round(w*dpr)); c.height=Math.max(1,Math.round(h*dpr)); }
+  tlDirty(); tlDrawOver();
+}
+new ResizeObserver(()=>{ if(tlEl.clientWidth!==TL.w) tlResize(); }).observe(tlEl);
+const tx=t=>G+(t-TL.view.start)/TL.view.span*(TL.w-G);
+const xt=x=>TL.view.start+(x-G)/(TL.w-G)*TL.view.span;
+function tlSetView(start,span){
+  if(!S.dur) return;
+  const d=S.dur; span=Math.min(d,Math.max(Math.min(d,2),span));
+  start=Math.max(0,Math.min(d-span,start));
+  if(start===TL.view.start&&span===TL.view.span) return;
+  TL.view={start,span}; tlDirty(); tlDrawOver(); overviewWin();
+}
+function tlZoom(f,anchor){ const v=TL.view, a=anchor??curF/S.fps, span=v.span*f; tlSetView(a-(a-v.start)*(span/v.span),span); }
+function tlFitClip(){ if(S.inF==null||S.outF==null) return setStatus("Sätt IN och UT först.","warn"); const a=S.inF/S.fps, b=(S.outF+1)/S.fps, pad=Math.max(0.5,(b-a)*0.2); tlSetView(a-pad,b-a+2*pad); }
+function tlReveal(t){ const v=TL.view; if(t<v.start||t>v.start+v.span) tlSetView(t-v.span/2,v.span); }
+function tlDirty(){ if(TL.dirty) return; TL.dirty=true; requestAnimationFrame(()=>{ TL.dirty=false; tlDrawBase(); }); }
+function overviewWin(){
+  const w=$("tlw"); if(!S.dur||TL.view.span>=S.dur){ w.hidden=true; return; }
+  w.hidden=false; w.style.left=(100*TL.view.start/S.dur)+"%"; w.style.width=(100*TL.view.span/S.dur)+"%";
+}
+function nearestThumb(key){
+  const k=TL.keys; if(!k.length) return null; let lo=0, hi=k.length-1;
+  while(lo<hi){ const m=(lo+hi)>>1; if(k[m]<key) lo=m+1; else hi=m; }
+  const c=lo>0&&Math.abs(k[lo-1]-key)<Math.abs(k[lo]-key)?k[lo-1]:k[lo];
+  return TL.thumbs.get(c);
+}
+function storeThumb(key,canvas){
+  if(TL.thumbs.has(key)) return;
+  TL.thumbs.set(key,canvas);
+  let lo=0, hi=TL.keys.length; while(lo<hi){ const m=(lo+hi)>>1; if(TL.keys[m]<key) lo=m+1; else hi=m; }
+  TL.keys.splice(lo,0,key);
+  if(TL.thumbs.size>800){ const old=TL.thumbs.keys().next().value; TL.thumbs.delete(old); TL.keys.splice(TL.keys.indexOf(old),1); }
+}
+function tickStep(){
+  const pxPerS=(TL.w-G)/TL.view.span, f=S.fps;
+  return [1/f,2/f,5/f,10/f,1,2,5,10,15,30,60,120,300,600,900,1800,3600].find(s=>s*pxPerS>=100)||3600;
+}
+function tlDrawBase(){
+  const ctx=cBase.getContext("2d"), C=TL.col, W=TL.w, H=TL.h;
+  ctx.setTransform(TL.dpr,0,0,TL.dpr,0,0); ctx.clearRect(0,0,W,H);
+  ctx.fillStyle=C.raise; ctx.fillRect(0,0,W,H);
+  if(!S.dur||W<=G) return;
+  const v=TL.view, t1=v.start+v.span, nch=Math.min(TL.ch,MAXCH);
+  // linjal
+  ctx.fillStyle=C.panel; ctx.fillRect(G,0,W-G,RULER);
+  const st=tickStep(); ctx.font="10px "+FONT_TC; ctx.textBaseline="middle";
+  for(let k=Math.floor(v.start/st);k*st<=t1;k++){
+    const t=k*st, x=Math.round(tx(t))+0.5; if(x<G) continue;
+    ctx.fillStyle=C.line; ctx.fillRect(x,RULER-8,1,8); ctx.fillRect(Math.round(tx(t+st/2)),RULER-4,1,4);
+    ctx.fillStyle=C.muted; ctx.fillText(srcTc(Math.round(t*S.fps)),x+4,9);
+  }
+  // V1: miniatyrer
+  const y=RULER+1, th=VH-2, tw=Math.round(th*16/9), tileS=tw/((W-G)/v.span);
+  const step=[1,2,5,10,25,50].map(n=>n/S.fps).concat([5,10,15,30,60,120,300,600]).find(s=>s>=tileS)||600;
+  const want=[];
+  ctx.save(); ctx.beginPath(); ctx.rect(G,y,W-G,th); ctx.clip();
+  for(let k=Math.floor(v.start/step);k*step<=t1&&k*step<S.dur;k++){
+    const t=k*step, x=tx(t), w=Math.max(1,tx(t+step)-x), key=Math.round(t*1000);
+    let img=TL.thumbs.get(key); if(!img){ if(TL.sink) want.push(t); img=nearestThumb(key); }
+    if(img){ ctx.save(); ctx.beginPath(); ctx.rect(x,y,w,th); ctx.clip(); const iw=th*img.width/img.height;
+      for(let xx=x;xx<x+w;xx+=iw) ctx.drawImage(img,xx,y,iw,th); ctx.restore(); }
+    ctx.fillStyle=C.panel; ctx.fillRect(Math.round(x),y,1,th);
+  }
+  ctx.restore();
+  TL.want=want; thumbPump();
+  // A1…: vågform, ett spår per kanal
+  for(let c=0;c<nch;c++){
+    const y0=RULER+VH+c*AH, mid=y0+AH/2, half=AH/2-3;
+    ctx.fillStyle=C.line; ctx.fillRect(G,y0,W-G,1);
+    if(!TL.peaks||!TL.peaks[c]) continue;
+    const P=TL.peaks[c], r=TL.peakRate; ctx.fillStyle=C.accent;
+    for(let x=G;x<W;x++){
+      const b0=Math.max(0,Math.floor(xt(x)*r)), b1=Math.max(b0+1,Math.floor(xt(x+1)*r));
+      if(b0>=TL.peakEnd||b0>=P.length) break;
+      let m=0; for(let bb=b0;bb<b1&&bb<P.length;bb++) if(P[bb]>m) m=P[bb];
+      const db=m>0?1+20*Math.log10(m)/48:0; // 0 dBFS = fullt spår, −48 dBFS = noll
+      if(db>0){ const hh=Math.max(0.5,Math.min(1,db)*half); ctx.fillRect(x,mid-hh,1,hh*2); }
+    }
+  }
+  // spårhuvuden
+  ctx.fillStyle=C.panel; ctx.fillRect(0,0,G,H); ctx.fillStyle=C.line; ctx.fillRect(G-1,0,1,H); ctx.fillRect(0,RULER,W,1);
+  ctx.fillStyle=C.muted; ctx.font="600 11px "+FONT_TC;
+  ctx.fillText("V1",10,RULER+VH/2);
+  for(let c=0;c<nch;c++) ctx.fillText("A"+(c+1),10,RULER+VH+c*AH+AH/2);
+}
+function tlDrawOver(){
+  const ctx=cOver.getContext("2d"), C=TL.col, H=TL.h;
+  ctx.setTransform(TL.dpr,0,0,TL.dpr,0,0); ctx.clearRect(0,0,TL.w,H);
+  if(!S.dur||TL.w<=G) return;
+  ctx.save(); ctx.beginPath(); ctx.rect(G,0,TL.w-G,H); ctx.clip();
+  ctx.font="600 9px "+FONT_TC; ctx.textBaseline="middle";
+  const flag=(x,txt,col,right)=>{ const w=ctx.measureText(txt).width+8, fx=right?x-w:x; ctx.fillStyle=col; ctx.fillRect(fx,RULER-14,w,13); ctx.fillStyle=C.bg; ctx.fillText(txt,fx+4,RULER-7.5); };
+  if(S.inF!=null){
+    const xi=tx(S.inF/S.fps);
+    if(S.outF!=null&&S.outF>=S.inF){ const xo=tx((S.outF+1)/S.fps);
+      ctx.globalAlpha=.22; ctx.fillStyle=C.accent; ctx.fillRect(xi,RULER,xo-xi,H-RULER); ctx.globalAlpha=1;
+      ctx.fillStyle=C.out; ctx.fillRect(xo-1,0,2,H); flag(xo,"UT",C.out,true); }
+    ctx.fillStyle=C.in; ctx.fillRect(xi-1,0,2,H); flag(xi,"IN",C.in,false);
+  } else if(S.outF!=null){ const xo=tx((S.outF+1)/S.fps); ctx.fillStyle=C.out; ctx.fillRect(xo-1,0,2,H); flag(xo,"UT",C.out,true); }
+  const x=tx(curF/S.fps), fw=tx((curF+1)/S.fps)-x;
+  if(fw>3){ ctx.globalAlpha=.18; ctx.fillStyle=C.fg; ctx.fillRect(x,RULER,fw,H-RULER); ctx.globalAlpha=1; }
+  ctx.fillStyle=C.fg; ctx.fillRect(Math.round(x)-0.5,0,1.5,H);
+  ctx.beginPath(); ctx.moveTo(x-5,RULER-7); ctx.lineTo(x+5,RULER-7); ctx.lineTo(x,RULER); ctx.fill();
+  ctx.restore();
+}
+/* Miniatyrer avkodas i små omgångar, så att en ny vy snabbt får förtur. */
+async function thumbPump(){
+  if(TL.busy||!TL.sink) return; TL.busy=true; const seq=TL.seq;
+  try{
+    while(TL.want.length&&seq===TL.seq){
+      const batch=[...new Set(TL.want.splice(0,6))].sort((a,b)=>a-b); let i=0;
+      for await (const wc of TL.sink.canvasesAtTimestamps(batch)){
+        const t=batch[i++]; if(seq!==TL.seq) break;
+        if(wc) storeThumb(Math.round(t*1000),wc.canvas);
+      }
+      if(seq===TL.seq) tlDirty();
+      await new Promise(r=>setTimeout(r,0));
+    }
+  }catch(e){ console.warn("Miniatyrer",e); }
+  finally{ TL.busy=false; }
+}
+/* Vågformen visas i dB (−48 till 0 dBFS), så att normalt programljud syns tydligt.
+   Läser hela ljudspåret i bakgrunden och sparar toppvärden (100 per sekund och kanal). */
+async function loadPeaks(seq,at,nch){
+  const r=TL.peakRate, P=Array.from({length:nch},()=>new Float32Array(Math.ceil(S.dur*r)+2));
+  TL.peaks=P; TL.peakEnd=0; let tmp=new Float32Array(4096), last=0;
+  try{
+    for await (const smp of new M.AudioSampleSink(at).samples()){
+      if(seq!==TL.seq){ smp.close(); break; }
+      const n=smp.numberOfFrames, spb=smp.sampleRate/r, base=smp.timestamp*smp.sampleRate;
+      if(tmp.length<n) tmp=new Float32Array(n);
+      for(let c=0;c<Math.min(nch,smp.numberOfChannels);c++){
+        smp.copyTo(tmp,{planeIndex:c,format:"f32-planar"}); const p=P[c];
+        for(let i=0;i<n;i+=2){ const a=tmp[i]<0?-tmp[i]:tmp[i], b=((base+i)/spb)|0; if(b>=0&&b<p.length&&a>p[b]) p[b]=a; }
+      }
+      TL.peakEnd=Math.ceil((smp.timestamp+smp.duration)*r); smp.close();
+      if(performance.now()-last>400){ last=performance.now(); $("waveNote").textContent=`Läser ljudvågform… ${Math.min(99,Math.round(100*TL.peakEnd/r/S.dur))} %`; tlDirty(); }
+    }
+    if(seq===TL.seq){ TL.peakEnd=Infinity; $("waveNote").textContent=""; tlDirty(); }
+  }catch(e){ console.warn("Vågform",e); if(seq===TL.seq) $("waveNote").textContent="Ljudvågformen kunde inte läsas."; }
+}
+function tlReset(){
+  TL.seq++; try{ TL.input&&TL.input.dispose&&TL.input.dispose(); }catch(_){}
+  TL.input=TL.sink=TL.binSink=TL.peaks=null; TL.thumbs=new Map(); TL.keys=[]; TL.want=[]; TL.peakEnd=0; TL.ch=0;
+  $("waveNote").textContent=""; tlResize();
+}
+async function tlSetup(){
+  const seq=TL.seq;
+  tlResize(); overviewWin();
+  try{
+    const input=new M.Input({source:new M.BlobSource(S.file),formats:M.ALL_FORMATS}); TL.input=input;
+    const vt=await input.getPrimaryVideoTrack(), at=await input.getPrimaryAudioTrack();
+    if(seq!==TL.seq) return;
+    if(vt&&await vt.canDecode()){ TL.sink=new M.CanvasSink(vt,{height:72}); TL.binSink=new M.CanvasSink(vt,{height:144}); }
+    if(at&&await at.canDecode()){
+      const nch=Math.min(MAXCH,await at.getNumberOfChannels()); if(seq!==TL.seq) return;
+      TL.ch=nch; tlResize(); $("waveNote").textContent="Läser ljudvågform…"; loadPeaks(seq,at,nch);
+    } else $("waveNote").textContent=at?"Ljudet kan inte avkodas, ingen vågform.":"Filen saknar ljud.";
+    tlDirty(); renderClips();
+  }catch(e){ console.warn("Tidslinje",e); }
+}
+let tlDrag=null;
+const tlX=e=>e.clientX-tlEl.getBoundingClientRect().left;
+const nearMark=x=>{ if(S.inF!=null&&Math.abs(tx(S.inF/S.fps)-x)<=6) return "in"; if(S.outF!=null&&Math.abs(tx((S.outF+1)/S.fps)-x)<=6) return "out"; return null; };
+function tlMove(x){
+  x=Math.max(G,Math.min(TL.w-1,x)); const f=Math.round(xt(x)*S.fps);
+  if(tlDrag==="in"){ S.inF=Math.max(0,Math.min(S.outF!=null?S.outF:S.totalFrames-1,f)); seekFrame(S.inF,false); }
+  else if(tlDrag==="out"){ S.outF=Math.max(S.inF??0,Math.min(S.totalFrames-1,f-1)); seekFrame(S.outF,false); }
+  else seekFrame(Math.floor(xt(x)*S.fps),false);
+}
+tlEl.addEventListener("pointerdown",e=>{
+  if(!S.dur) return; const x=tlX(e); if(x<G) return;
+  tlEl.setPointerCapture(e.pointerId); tlDrag=nearMark(x)||"scrub";
+  if(!vid.paused) vid.pause(); tlMove(x);
+});
+tlEl.addEventListener("pointermove",e=>{ const x=tlX(e); if(tlDrag) return tlMove(x); tlEl.style.cursor=x>=G&&nearMark(x)?"ew-resize":"pointer"; });
+const tlUp=()=>{ if(tlDrag==="in"||tlDrag==="out") saveStore(); tlDrag=null; };
+tlEl.addEventListener("pointerup",tlUp); tlEl.addEventListener("pointercancel",tlUp);
+tlEl.addEventListener("wheel",e=>{
+  if(!S.dur) return;
+  if(e.ctrlKey||e.metaKey){ e.preventDefault(); tlZoom(Math.exp(e.deltaY*0.004),xt(Math.max(G,tlX(e)))); }
+  else if(e.shiftKey||Math.abs(e.deltaX)>Math.abs(e.deltaY)){ e.preventDefault(); const d=e.deltaX||e.deltaY; tlSetView(TL.view.start+d/(TL.w-G)*TL.view.span,TL.view.span); }
+},{passive:false});
+$("zIn").onclick=()=>tlZoom(0.5); $("zOut").onclick=()=>tlZoom(2);
+$("zFit").onclick=()=>tlSetView(0,S.dur); $("zClip").onclick=tlFitClip;
+
+/* ---------- klippmonitor ----------
+   Visar den exporterade filen om den finns i minnet, annars spelas IN→UT direkt ur källan. */
+const rv=$("resVid"), REC={mode:null,clip:null};
+const recLen=c=>c.outF-c.inF+1;
+function recFrame(){ const f=Math.floor(rv.currentTime*S.fps+1e-3); return REC.mode==="src"?f-REC.clip.inF:f; }
+function recSeek(k){ rv.currentTime=((REC.mode==="src"?REC.clip.inF:0)+k+0.25)/S.fps; }
+function recShow(clip){
+  rv.pause(); REC.clip=clip; const blob=S.blobs.get(clip.name);
+  if(blob){ REC.mode="blob"; rv.src=setUrl("res",blob); }
+  else { REC.mode="src"; if(S.urls.res){ URL.revokeObjectURL(S.urls.res); S.urls.res=null; } rv.src=S.urls.vid; }
+  rv.onloadedmetadata=()=>recSeek(0);
+  $("recEmpty").hidden=true; $("rPlay").disabled=$("rStart").disabled=false; $("bDownload").hidden=!blob;
+  $("recName").textContent=clip.name;
+  const len=(recLen(clip)/S.fps).toFixed(2)+" s"+(clip.freeze?` + frys ${clip.freeze} s`:"");
+  $("recInfo").textContent=blob?`Exporterad fil · ${(blob.size/1e6).toFixed(2)} MB · ${len}`:`Förhandsvisning ur källan · ${len}${clip.freeze?" (frysrutan visas inte)":""}. Exportera igen för att få filen.`;
+  recUi(); renderClips();
+}
+function clearRec(){
+  rv.pause(); rv.removeAttribute("src"); rv.load(); REC.mode=REC.clip=null;
+  if(S.urls.res){ URL.revokeObjectURL(S.urls.res); S.urls.res=null; }
+  $("recEmpty").hidden=false; $("rPlay").disabled=$("rStart").disabled=true; $("bDownload").hidden=true;
+  $("rtc").textContent="--:--:--:--"; $("recPos").textContent="–"; $("recName").textContent=""; $("recInfo").textContent="";
+}
+function recUi(){
+  const c=REC.clip; if(!c) return;
+  const n=recLen(c), k=Math.max(0,recFrame()), total=n+(REC.mode==="blob"?Math.round((c.freeze||0)*S.fps):0);
+  $("rtc").textContent=k<n?srcTc(c.inF+k):srcTc(c.outF)+" frys";
+  $("recPos").textContent=`${framesToRel(Math.min(k,total-1))} / ${framesToRel(total)}`;
+}
+function recPlay(){
+  if(!REC.clip) return;
+  if(!rv.paused) return rv.pause();
+  const n=recLen(REC.clip);
+  if(REC.mode==="src"&&recFrame()>=n-1){ recSeek(0); rv.addEventListener("seeked",()=>rv.play(),{once:true}); }
+  else { if(rv.ended) rv.currentTime=0; rv.play(); }
+}
+function recTick(){
+  if(rv.paused||!REC.clip) return;
+  if(REC.mode==="src"&&recFrame()>=recLen(REC.clip)){ rv.pause(); recSeek(recLen(REC.clip)-1); }
+  recUi(); requestAnimationFrame(recTick);
+}
+rv.addEventListener("play",()=>{ $("rPlay").textContent="Paus"; recTick(); });
+rv.addEventListener("pause",()=>{ $("rPlay").textContent="Spela"; recUi(); });
+rv.addEventListener("seeked",recUi);
+rv.addEventListener("click",recPlay);
+$("rPlay").onclick=recPlay; $("rStart").onclick=()=>{ rv.pause(); recSeek(0); };
 
 /* ---------- gränssnitt ---------- */
 function updateUi(){
@@ -3482,12 +3807,8 @@ function updateUi(){
   const hasR=S.inF!=null&&S.outF!=null;
   $("tlr").hidden=!hasR;
   if(hasR){ $("tlr").style.left=pct(S.inF); $("tlr").style.width=`calc(${pct(S.outF+1-S.inF)} )`; }
-  if(vid.paused || curF<zStart || curF>zStart+zoomSpan()) zStart=zoomStart();
-  const zp=f=>(100*(f-zStart)/zoomSpan())+"%";
-  $("zlh").style.left=zp(Math.max(zStart,Math.min(zStart+zoomSpan(),curF)));
-  $("zl0").textContent=srcTc(zStart); $("zl1").textContent=srcTc(zStart+zoomSpan());
-  $("zlr").hidden=!hasR;
-  if(hasR){ const a=Math.max(S.inF,zStart), b=Math.min(S.outF+1,zStart+zoomSpan()); $("zlr").hidden=b<=a; $("zlr").style.left=zp(a); $("zlr").style.width=(100*(b-a)/zoomSpan())+"%"; }
+  if(!vid.paused){ const t=curF/S.fps, v=TL.view; if(t<v.start||t>v.start+v.span*0.95) tlSetView(t-v.span*0.05,v.span); }
+  tlDrawOver();
   if(document.activeElement!==$("inTc")) $("inTc").value=S.inF!=null?srcTc(S.inF):"";
   if(document.activeElement!==$("outTc")) $("outTc").value=S.outF!=null?srcTc(S.outF):"";
   let lenTxt="Längd: –"; $("lenNote").className="note";
@@ -3497,7 +3818,7 @@ function updateUi(){
     if(n<1){ lenTxt="UT ligger före IN."; $("lenNote").className="err"; }
   }
   $("lenNote").textContent=lenTxt;
-  $("bExport").disabled=!(hasR&&S.outF>=S.inF);
+  $("bExport").disabled=!!S.noExport||!(hasR&&S.outF>=S.inF);
 }
 function setIn(){ if(!S.dur) return; S.inF=curF; if(S.outF!=null&&S.outF<S.inF) S.outF=null; updateUi(); saveStore(); }
 function setOut(){ if(!S.dur) return; S.outF=curF; if(S.inF!=null&&S.inF>S.outF) S.inF=null; updateUi(); saveStore(); }
@@ -3536,9 +3857,38 @@ async function pickAudioCodec(){
   if(await M.canEncodeAudio("opus")) return "opus";
   return null;
 }
+/* Ljudkodare lägger in tystnad i början (AAC: ofta 1024 eller 2112 sampel) utan att alltid
+   ange det. Fördröjningen mäts genom att koda och avkoda en kort ton, och ljudet flyttas
+   sedan lika mycket bakåt. Mediabunny skriver då en edit-lista som döljer tystnaden. */
+const delayCache=new Map();
+function measureAudioDelay(codec,rate,ch){
+  const k=`${codec}/${rate}/${ch}`;
+  if(!delayCache.has(k)) delayCache.set(k,(async()=>{
+    try{
+      const lead=4800, N=lead+9600;
+      const o=new M.Output({format:new M.Mp4OutputFormat({fastStart:"in-memory"}),target:new M.BufferTarget()});
+      const src=new M.AudioSampleSource({codec,bitrate:128000}); o.addAudioTrack(src); await o.start();
+      const d=new Float32Array(N*ch);
+      for(let c=0;c<ch;c++) for(let i=lead;i<N;i++) d[c*N+i]=0.8*Math.sin(2*Math.PI*1000*(i-lead)/rate);
+      const as=new M.AudioSample({data:d,format:"f32-planar",numberOfChannels:ch,sampleRate:rate,timestamp:0}); await src.add(as); as.close();
+      src.close(); await o.finalize();
+      const inp=new M.Input({source:new M.BufferSource(o.target.buffer),formats:M.ALL_FORMATS});
+      let pos=null;
+      for await (const x of new M.AudioSampleSink(await inp.getPrimaryAudioTrack()).samples()){
+        if(pos==null){ const t=new Float32Array(x.numberOfFrames); x.copyTo(t,{planeIndex:0,format:"f32-planar"});
+          const i=t.findIndex(v=>Math.abs(v)>0.05); if(i>=0) pos=Math.round(x.timestamp*rate)+i; }
+        x.close();
+      }
+      if(pos==null) return 0;
+      const delay=pos-lead;
+      return Math.abs(delay)<=8||delay<0||delay>rate/2 ? 0 : delay; // brus i mätningen eller orimligt värde
+    }catch(e){ console.warn("Kunde inte mäta ljudkodarens fördröjning",e); return 0; }
+  })());
+  return delayCache.get(k);
+}
 async function exportClip(){
   if(S.inF==null||S.outF==null||S.outF<S.inF) return;
-  const btn=$("bExport"); btn.disabled=true; $("result").hidden=true;
+  const btn=$("bExport"); btn.disabled=true;
   $("prog").hidden=false; $("progBar").style.width="0%"; setStatus("Förbereder…");
   const fps=S.fps, inF=S.inF, outF=S.outF, nFrames=outF-inF+1;
   const freezeS=Math.max(0,parseFloat($("freeze").value)||0); const freezeN=Math.round(freezeS*fps);
@@ -3549,7 +3899,7 @@ async function exportClip(){
     input=new M.Input({source:new M.BlobSource(S.file),formats:M.ALL_FORMATS});
     const vt=await input.getPrimaryVideoTrack(); const at=await input.getPrimaryAudioTrack();
     if(!vt) throw new Error("Filen saknar videospår.");
-    if(!(await vt.canDecode())) throw new Error(`Webbläsaren kan inte avkoda videon (${vt.codec}). Använd Chrome.`);
+    if(!(await vt.canDecode())) throw new Error(`Webbläsaren kan inte avkoda videon (${codecName(vt.codec)}).`);
     const w=await vt.getDisplayWidth(), h=await vt.getDisplayHeight();
     const vCodec=await pickVideoCodec(w,h); if(!vCodec) throw new Error("Webbläsaren kan inte koda video.");
     const useAudio=at && await at.canDecode();
@@ -3592,7 +3942,8 @@ async function exportClip(){
     if(aSrc){
       setStatus("Kodar ljud…");
       const aSink=new M.AudioSampleSink(at);
-      let rate=48000, ch=2, outPos=0; // i ljudrutor; ch = antal kanaler i exporten (högst 2)
+      let rate=48000, ch=2, outPos=0, shift=null; // i ljudrutor; shift i sekunder; ch = kanaler i exporten (högst 2)
+      const getShift=async()=>shift??=(await measureAudioDelay(aCodec,rate,ch))/rate;
       const map=$("audioMap").value;
       for await (const s of aSink.samples(Math.max(0,t0-0.1), t1)){
         rate=s.sampleRate; const srcCh=s.numberOfChannels; ch=Math.min(2,srcCh);
@@ -3612,7 +3963,7 @@ async function exportClip(){
           data.set(plane(Math.min(first,srcCh-1)),0); data.set(plane(Math.min(first+1,srcCh-1)),len);
         }
         const ts=(sStart+a/rate)-t0;
-        { const as=new M.AudioSample({data,format:"f32-planar",numberOfChannels:ch,sampleRate:rate,timestamp:Math.max(0,ts)}); await aSrc.add(as); as.close(); }
+        { const as=new M.AudioSample({data,format:"f32-planar",numberOfChannels:ch,sampleRate:rate,timestamp:Math.max(0,ts)-await getShift()}); await aSrc.add(as); as.close(); }
         outPos=Math.max(outPos,Math.round((Math.max(0,ts))*rate)+len);
         s.close();
       }
@@ -3620,7 +3971,7 @@ async function exportClip(){
       let pos=Math.max(outPos,0);
       while(pos<total){
         const len=Math.min(4096,total-pos);
-        { const as=new M.AudioSample({data:new Float32Array(len*ch),format:"f32-planar",numberOfChannels:ch,sampleRate:rate,timestamp:pos/rate}); await aSrc.add(as); as.close(); }
+        { const as=new M.AudioSample({data:new Float32Array(len*ch),format:"f32-planar",numberOfChannels:ch,sampleRate:rate,timestamp:pos/rate-await getShift()}); await aSrc.add(as); as.close(); }
         pos+=len;
       }
       aSrc.close();
@@ -3628,14 +3979,11 @@ async function exportClip(){
     setStatus("Skriver filen…"); $("progBar").style.width="95%";
     await output.finalize();
     const blob=new Blob([output.target.buffer],{type:"video/mp4"});
-    S.lastBlob=blob; S.lastName=name;
-    $("resVid").src=URL.createObjectURL(blob);
-    $("resInfo").textContent=`${name} · ${(blob.size/1e6).toFixed(2)} MB · ${((nFrames+freezeN)/fps).toFixed(2)} s`;
-    $("result").hidden=false; $("progBar").style.width="100%";
+    S.blobs.set(name,blob); $("progBar").style.width="100%";
     setStatus(warn.length?warn.join(" "):"Klart. Lyssna igenom klippet innan det används.",warn.length?"warn":"note");
     const clip={name,inF,outF,freeze:freezeS,inTc:srcTc(inF),outTc:srcTc(outF)};
-    S.clips=S.clips.filter(c=>c.name!==name); S.clips.push(clip); saveStore(); renderClips(); renderQs(); $("outName").value=""; suggestName();
-    download();
+    S.clips=S.clips.filter(c=>c.name!==name); S.clips.push(clip); saveStore(); renderQs(); $("outName").value=""; suggestName();
+    recShow(clip); download(name);
   }catch(e){
     console.error(e); setStatus("Exporten misslyckades: "+(e&&e.message||e),"err");
   }finally{
@@ -3643,17 +3991,19 @@ async function exportClip(){
     try{ input&&input.dispose&&input.dispose(); }catch(_){}
   }
 }
-function download(){
-  if(!S.lastBlob) return;
-  const a=document.createElement("a"); a.href=URL.createObjectURL(S.lastBlob); a.download=S.lastName;
-  document.body.appendChild(a); a.click(); a.remove();
+/* Ger en blob-URL för en plats ("vid", "res") och frigör den förra, så att gamla filer inte ligger kvar i minnet. */
+function setUrl(slot,blob){ if(S.urls[slot]) URL.revokeObjectURL(S.urls[slot]); return S.urls[slot]=URL.createObjectURL(blob); }
+function download(name){
+  const blob=S.blobs.get(name); if(!blob) return;
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),60000);
 }
 function saveStill(){
   if(!S.dur||!vid.videoWidth) return;
   const c=document.createElement("canvas"); c.width=vid.videoWidth; c.height=vid.videoHeight;
   c.getContext("2d").drawImage(vid,0,0);
-  c.toBlob(b=>{ const a=document.createElement("a"); a.href=URL.createObjectURL(b);
-    a.download=`${($("prefix").value||"bild").trim()}${S.ep!=null?pad(S.ep):""}_ruta_${srcTc(curF).replace(/:/g,"-")}.png`;
+  c.toBlob(b=>{ const a=document.createElement("a"); a.href=URL.createObjectURL(b); setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+    a.download=`${($("prefix").value||"bild").trim()}${S.ep!=null?pad(S.ep):""}_ruta_${srcTc(curF).replace(/[:;]/g,"-")}.png`;
     document.body.appendChild(a); a.click(); a.remove(); },"image/png");
 }
 
@@ -3666,18 +4016,40 @@ function loadStore(){
 }
 try{ const p=localStorage.getItem("klippbordet:prefix2"); if(p) $("prefix").value=p; }catch(_){}
 
-/* ---------- klipplista ---------- */
+/* ---------- bin ---------- */
+const thumbBusy=new Set(), thumbFailed=new Set(); let thumbChain=Promise.resolve();
+function ensureClipThumb(c){
+  if(c.thumb||!TL.binSink||thumbBusy.has(c.name)||thumbFailed.has(c.name)) return;
+  thumbBusy.add(c.name); const seq=TL.seq, sink=TL.binSink;
+  thumbChain=thumbChain.then(async()=>{
+    try{ const wc=await sink.getCanvas((c.inF+0.25)/S.fps);
+      if(seq!==TL.seq) return;
+      if(wc){ c.thumb=wc.canvas.toDataURL("image/jpeg",0.75); saveStore(); renderClips(); } else thumbFailed.add(c.name);
+    }catch(e){ console.warn("Miniatyr",e); thumbFailed.add(c.name); }
+    finally{ thumbBusy.delete(c.name); }
+  });
+}
 function renderClips(){
-  const ul=$("clips"); ul.innerHTML="";
+  const box=$("clips"); box.innerHTML="";
   $("clipsEmpty").hidden=S.clips.length>0;
   S.clips.forEach((c,i)=>{
-    const li=document.createElement("li"); li.className="clip";
-    li.innerHTML=`<b></b><span></span><div class="acts"><button data-a="load">Öppna</button><button data-a="del" aria-label="Ta bort ur listan">✕</button></div>`;
-    li.querySelector("b").textContent=c.name;
-    li.querySelector("span").textContent=`${c.inTc} → ${c.outTc}${c.freeze?` · frys ${c.freeze} s`:""}`;
-    li.querySelector('[data-a="load"]').onclick=()=>{ S.inF=c.inF; S.outF=c.outF; $("freeze").value=c.freeze||0; $("outName").value=c.name; checkName(); seekFrame(c.inF); };
-    li.querySelector('[data-a="del"]').onclick=()=>{ S.clips.splice(i,1); saveStore(); renderClips(); renderQs(); };
-    ul.appendChild(li);
+    const d=document.createElement("div"); d.className="card"+(REC.clip&&REC.clip.name===c.name?" sel":""); d.tabIndex=0;
+    d.title="Visa i klippmonitorn";
+    d.innerHTML=`<img class="th" alt=""><div class="meta"><b></b><span data-k="tc"></span><span data-k="len"></span></div>
+      <div class="acts"><button data-a="load" title="Lägg IN och UT i källan">Till källan</button>${S.blobs.has(c.name)?'<button data-a="dl">Ladda ner</button>':""}<button data-a="del" aria-label="Ta bort ur bin">✕</button></div>`;
+    const img=d.querySelector("img"); if(c.thumb) img.src=c.thumb; else { img.removeAttribute("src"); ensureClipThumb(c); }
+    d.querySelector("b").textContent=c.name; d.querySelector("b").title=c.name;
+    d.querySelector('[data-k="tc"]').textContent=`${c.inTc} → ${c.outTc}`;
+    d.querySelector('[data-k="len"]').textContent=`${(recLen(c)/S.fps).toFixed(2)} s${c.freeze?` + frys ${c.freeze} s`:""}`;
+    d.onclick=e=>{ if(!e.target.closest("button")) recShow(c); };
+    d.onkeydown=e=>{ if((e.key==="Enter"||e.key===" ")&&e.target===d){ e.preventDefault(); recShow(c); } };
+    d.querySelector('[data-a="load"]').onclick=()=>{ S.inF=c.inF; S.outF=c.outF; $("freeze").value=c.freeze||0; $("outName").value=c.name; checkName(); seekFrame(c.inF); saveStore(); };
+    const dl=d.querySelector('[data-a="dl"]'); if(dl) dl.onclick=()=>download(c.name);
+    d.querySelector('[data-a="del"]').onclick=()=>{ S.clips.splice(i,1); S.blobs.delete(c.name);
+      if(REC.clip&&REC.clip.name===c.name) clearRec();
+      S.qs.forEach(q=>{ if(q.media===c.name) q.media=""; if(q.svar_media===c.name) q.svar_media=""; });
+      saveStore(); renderClips(); renderQs(); };
+    box.appendChild(d);
   });
 }
 
@@ -3728,13 +4100,20 @@ $("bPlay").onclick=togglePlay;
 $("bBackF").onclick=()=>step(-1); $("bFwdF").onclick=()=>step(1);
 $("bBackS").onclick=()=>step(-fpsInt()); $("bFwdS").onclick=()=>step(fpsInt());
 $("bSetIn").onclick=setIn; $("bSetOut").onclick=setOut; $("bPlayClip").onclick=playClip;
-$("bStill").onclick=saveStill; $("bExport").onclick=exportClip; $("bDownload").onclick=download;
+$("bStill").onclick=saveStill; $("bExport").onclick=exportClip; $("bDownload").onclick=()=>REC.clip&&download(REC.clip.name);
 $("bAddQ").onclick=()=>{ const q=newQ(); const n=S.clips.length; if(n) q.media=S.clips[n-1].name; S.qs.push(q); saveStore(); renderQs(); };
 $("bCopy").onclick=copyJson;
 const doGoto=()=>{ const f=parseInput($("goto").value); if(f==null) return setStatus("Tidkoden gick inte att tolka.","err"); if(!vid.paused) vid.pause(); seekFrame(f); };
 $("bGoto").onclick=doGoto; $("goto").onkeydown=e=>{ if(e.key==="Enter") doGoto(); };
-$("inTc").onchange=()=>{ const f=parseInput($("inTc").value); if(f!=null){ S.inF=f; saveStore(); } updateUi(); };
-$("outTc").onchange=()=>{ const f=parseInput($("outTc").value); if(f!=null){ S.outF=f; saveStore(); } updateUi(); };
+/* Tolkar en IN/UT-tidkod och godtar bara rutor som finns i filen. */
+function parseMark(str){
+  const f=parseInput(str);
+  if(f==null){ setStatus("Tidkoden gick inte att tolka.","err"); return null; }
+  if(f<0||f>=S.totalFrames){ setStatus(`Tidkoden ligger utanför filen (${srcTc(0)}–${srcTc(Math.max(0,S.totalFrames-1))}).`,"err"); return null; }
+  setStatus(""); return f;
+}
+$("inTc").onchange=()=>{ const f=parseMark($("inTc").value); if(f!=null){ S.inF=f; saveStore(); } updateUi(); };
+$("outTc").onchange=()=>{ const f=parseMark($("outTc").value); if(f!=null){ S.outF=f; saveStore(); } updateUi(); };
 $("freeze").oninput=updateUi;
 $("startTc").onchange=()=>{ const f=tcToFrames($("startTc").value); if(f!=null){ S.startTcFrames=f; $("startTc").dataset.src="manuell"; updateUi(); } };
 $("prefix").onchange=()=>{ saveStore(); suggestName(); };
@@ -3750,6 +4129,8 @@ document.addEventListener("keydown",e=>{
   else if(k==="i"||k==="I") setIn();
   else if(k==="o"||k==="O") setOut();
   else if(k==="p"||k==="P") playClip();
+  else if(k==="+"||k==="=") tlZoom(0.5);
+  else if(k==="-"||k==="_") tlZoom(2);
 });
 if(!window.VideoEncoder||!M){ setStatus("Den här webbläsaren saknar stöd för videokodning. Öppna filen i Chrome på datorn.","err"); }
 </script>
