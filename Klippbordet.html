@@ -237,9 +237,13 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 
       <section class="panel" aria-labelledby="h-sug" id="sugPanel" hidden>
         <h2 id="h-sug">Föreslå frågor med Claude</h2>
-        <div class="field"><label for="sugText">Underlag: repliker eller undertext med tidkoder</label>
-          <textarea id="sugText" rows="6" placeholder="Klistra in undertext eller repliker med tidkoder, t.ex.&#10;01:17:19:17  Jag trodde aldrig att jag skulle …"></textarea></div>
-        <div class="row"><label class="btn" for="sugFile" style="display:inline-flex;align-items:center">Läs in undertextfil…</label><input id="sugFile" type="file" accept=".txt,.srt,.vtt,.xif,.xml,.stl,text/*" hidden><span class="note" id="sugFileNote"></span></div>
+        <div class="row"><label class="btn" for="sugFile" style="display:inline-flex;align-items:center">Läs in undertextfil…</label><input id="sugFile" type="file" accept=".txt,.srt,.vtt,.xif,.xml,.stl,text/*" hidden><button id="sugFileDel" hidden>Ta bort filen</button></div>
+        <p class="note" id="sugFileNote">Läs in en fil med undertexter till ett eller flera avsnitt. Den sparas i webbläsaren, så du behöver bara göra det en gång.</p>
+        <div class="field" id="sugEpField" hidden><label for="sugEp">Avsnitt i undertextfilen</label><select id="sugEp"></select></div>
+        <p class="note" id="sugEpNote" hidden></p>
+        <details id="sugPasteBox"><summary>Klistra in text i stället</summary>
+          <textarea id="sugText" rows="6" style="margin-top:6px" aria-label="Underlag att klistra in" placeholder="Repliker eller undertext med tidkoder, t.ex.&#10;01:17:19:17  Jag trodde aldrig att jag skulle …"></textarea>
+          <p class="note" style="margin-top:4px">Inklistrad text används i stället för filen så länge rutan inte är tom.</p></details>
         <div class="grid2">
           <div class="field"><label for="sugN">Antal frågor</label><input id="sugN" type="number" min="1" max="20" step="1" value="5" inputmode="numeric"></div>
           <div class="field"><label for="sugType">Frågetyp</label><select id="sugType">
@@ -3504,7 +3508,7 @@ async function openFile(file){
   } else { $("startTc").value="01:00:00:00"; $("startTc").dataset.src="antagen"; }
   S.startTcFrames=tcToFrames($("startTc").value)??tcToFrames("01:00:00:00");
   $("fpsNote").textContent=`Bildfrekvens: ${S.fps} rutor/s${S.df?" (drop frame)":""} · starttidkod ${$("startTc").value} (${$("startTc").dataset.src==="fil"?"läst ur filen":"antagen, kontrollera"})`;
-  loadStore(); suggestName(); renderAll(); sugLoad(); blobRestore();
+  loadStore(); suggestName(); renderAll(); sugLoad(); blobRestore(); $("sugEp").dataset.manual=""; subsRender();
   vid.src=setUrl("vid",file);
 }
 vid.addEventListener("loadedmetadata",()=>{
@@ -4271,6 +4275,67 @@ document.addEventListener("keydown",e=>{
 const SUG={list:[],ctl:null};
 const SAMPLEP=(window.claude&&window.claude.use)?window.claude.use("sample").catch(()=>null):Promise.resolve(null);
 const SUG_MAX=180000;
+/* ---- Undertextfil med ett eller flera avsnitt ----
+   Filen delas i avsnitt: först efter rubriker (t.ex. "Avsnitt 10", "Pgm 10", "Ep 10", "-010-"),
+   annars där tidkoderna börjar om. Avsnittet väljs efter videofilens namn och kan ändras i listan. */
+const SUBS={name:"",text:"",parts:[]};
+const EP_HEAD=/^[^\wåäö]{0,3}(?:avsnitt|avs|program|pgm|episod|episode|ep|del)[\s:#>\-_.]*(\d{1,3})\b|-(\d{3})[A-Z]?-/i;
+function subsSplit(text){
+  const lines=text.split(/\r?\n/);
+  // 1. Rubriker: korta rader med avsnittsnummer
+  const heads=[];
+  lines.forEach((l,i)=>{ const t=l.trim(); if(t.length&&t.length<=80){ const m=t.match(EP_HEAD); if(m){ const n=parseInt(m[1]||m[2],10); if(n>0&&(!heads.length||heads[heads.length-1].n!==n)) heads.push({i,n}); } } });
+  const distinct=new Set(heads.map(h=>h.n));
+  if(distinct.size>=2){
+    const parts=[]; heads.forEach((h,k)=>{ const end=k+1<heads.length?heads[k+1].i:lines.length; const body=lines.slice(h.i,end).join("\n").trim();
+      const prev=parts.find(p=>p.n===h.n); if(prev) prev.text+="\n"+body; else parts.push({n:h.n,text:body}); });
+    if(heads[0].i>0){ const pre=lines.slice(0,heads[0].i).join("\n").trim(); if(pre.length>200) parts.unshift({n:0,text:pre,label:"Före första rubriken"}); }
+    return parts;
+  }
+  // 2. Tidkoder som börjar om (mer än tio minuter bakåt) = nytt avsnitt
+  const tcRe=/(\d{1,2}):(\d{2}):(\d{2})(?:[:;.,](\d{1,3}))?/;
+  const parts=[]; let start=0, last=-1;
+  lines.forEach((l,i)=>{ const m=l.match(tcRe); if(!m) return; const sec=(+m[1])*3600+(+m[2])*60+(+m[3]);
+    if(last>=0&&sec<last-600){ parts.push(lines.slice(start,i).join("\n").trim()); start=i; } last=sec; });
+  parts.push(lines.slice(start).join("\n").trim());
+  return parts.filter(t=>t).map((t,k)=>({n:k+1,text:t}));
+}
+function videoEpisode(){
+  if(!S.file) return null; if(S.ep!=null) return S.ep;
+  const m=S.file.name.match(/(?:avsnitt|avs|program|pgm|episod|episode|ep|del)[ ._\-]*(\d{1,3})(?!\d)/i)||S.file.name.match(/-(\d{3})[A-Z]?-/);
+  return m?parseInt(m[1],10):null;
+}
+function subsSet(name,text){
+  SUBS.name=name; SUBS.text=text; SUBS.parts=text?subsSplit(text):[];
+  subsRender();
+}
+function subsRender(){
+  const has=!!SUBS.text, multi=SUBS.parts.length>1;
+  $("sugFileDel").hidden=!has; $("sugEpField").hidden=!multi;
+  if(!has){ $("sugFileNote").textContent="Läs in en fil med undertexter till ett eller flera avsnitt. Den sparas i webbläsaren, så du behöver bara göra det en gång."; $("sugEpNote").hidden=true; return; }
+  $("sugFileNote").textContent=`${SUBS.name}: ${multi?`${SUBS.parts.length} avsnitt hittade`:"ett avsnitt"}, ${SUBS.text.length.toLocaleString("sv-SE")} tecken.`;
+  if(!multi){ $("sugEpNote").hidden=true; return; }
+  const sel=$("sugEp"); const keep=sel.dataset.manual==="1"?sel.value:"";
+  sel.innerHTML=SUBS.parts.map((p,k)=>`<option value="${k}">${p.label||("Avsnitt "+p.n)} · ${p.text.length.toLocaleString("sv-SE")} tecken</option>`).join("");
+  const ep=videoEpisode(); const hit=ep!=null?SUBS.parts.findIndex(p=>p.n===ep):-1;
+  if(keep) sel.value=keep; else if(hit>=0) sel.value=String(hit);
+  const note=$("sugEpNote"); note.hidden=false;
+  if(keep){ note.textContent="Du har valt avsnitt själv."; note.className="note"; }
+  else if(hit>=0){ note.textContent=`Valt utifrån videofilen (avsnitt ${ep}).`; note.className="note"; }
+  else if(S.file){ note.textContent=ep!=null?`Videofilen ser ut att vara avsnitt ${ep}, men det avsnittet hittades inte i undertextfilen. Välj rätt avsnitt i listan.`:"Kunde inte se vilket avsnitt videofilen är. Välj rätt avsnitt i listan."; note.className="warn"; }
+  else { note.textContent="Öppna avsnittet, så väljs rätt undertexter automatiskt."; note.className="note"; }
+}
+function sugSource(){
+  const pasted=$("sugText").value.trim(); if(pasted) return {text:pasted,label:""};
+  if(!SUBS.text) return {text:"",label:""};
+  if(SUBS.parts.length>1){ const p=SUBS.parts[+$("sugEp").value||0]; return {text:p.text,label:p.label||("avsnitt "+p.n)}; }
+  return {text:SUBS.text.trim(),label:""};
+}
+async function subsStore(){ const db=await idb(); if(!db) return; try{ db.transaction("blobs","readwrite").objectStore("blobs").put({name:SUBS.name,text:SUBS.text},"subs:senaste"); }catch(_){} }
+async function subsRestore(){ const db=await idb(); if(!db) return;
+  await new Promise(res=>{ try{ const r=db.transaction("blobs").objectStore("blobs").get("subs:senaste"); r.onsuccess=()=>{ if(r.result&&r.result.text&&!SUBS.text) subsSet(r.result.name,r.result.text); res(); }; r.onerror=()=>res(); }catch(_){ res(); } }); }
+$("sugFileDel").onclick=async()=>{ subsSet("",""); $("sugEp").dataset.manual=""; const db=await idb(); if(db) try{ db.transaction("blobs","readwrite").objectStore("blobs").delete("subs:senaste"); }catch(_){} };
+$("sugEp").onchange=()=>{ $("sugEp").dataset.manual="1"; subsRender(); };
 function sugKey(){ const k=key(); return k?k+":forslag":null; }
 function sugSave(){ try{ const k=sugKey(); if(k) localStorage.setItem(k,JSON.stringify({list:SUG.list})); }catch(_){} }
 /* Förslag som gjorts innan ett avsnitt öppnats (eller medan ett annat var öppet och listan
@@ -4285,7 +4350,7 @@ function sugLoad(){
 function sugSetStatus(t,cls){ $("sugStatus").textContent=t; $("sugStatus").className=cls||"note"; }
 function sugPrompt(){
   const fps=S.fps||25, start=$("startTc").value||"01:00:00:00";
-  let text=$("sugText").value.trim(); let cut=false;
+  const src=sugSource(); let text=src.text; let cut=false;
   if(text.length>SUG_MAX){ text=text.slice(0,SUG_MAX); cut=true; }
   const n=Math.max(1,Math.min(20,Math.round(+$("sugN").value)||5)), typ=$("sugType").value, wish=$("sugWish").value.trim();
   const finns=S.qs.map(q=>q.fraga).filter(Boolean);
@@ -4318,7 +4383,7 @@ Svara med enbart ett JSON-objekt i den här formen:
 {"fragor":[{"typ":"Fullfölj repliken","fraga":"Hur avslutar Anna meningen?","alternativ":["…","…","…","…"],"ratt":"B","forklaring":"kort text som visas efter svaret","klipp":{"in":"01:17:15:00","ut":"01:17:19:17","frys":2},"svar":{"in":"01:17:15:00","ut":"01:17:24:10"},"underlag":"den replik eller rad frågan bygger på, ordagrant","osakerhet":"vad som behöver kontrolleras"}]}
 "svar" får vara null om inget svarsklipp behövs. "ratt" är A, B, C eller D.
 
-UNDERLAG${cut?" (förkortat, för långt för att skicka helt)":""}
+UNDERLAG${src.label?` (${src.label})`:""}${cut?" (förkortat, för långt för att skicka helt)":""}
 ${text}`;
   return {p,cut};
 }
@@ -4386,7 +4451,7 @@ const SUG_ERR={not_granted:"Sidan fick inte använda Claude. Du kan ändra det u
   empty_completion:"Claude svarade inte. Försök igen med kortare underlag.",session_expired:"Du behöver logga in på claude.ai igen.",upstream_error:"Anslutningen bröts. Försök igen."};
 async function sugGo(){
   const sample=await SAMPLEP; if(!sample) return;
-  if(!$("sugText").value.trim()) return sugSetStatus("Klistra in repliker eller undertext först, eller läs in en undertextfil.","warn");
+  if(!sugSource().text) return sugSetStatus("Läs in en undertextfil eller klistra in repliker först.","warn");
   const {p,cut}=sugPrompt();
   SUG.ctl=new AbortController(); $("sugGo").disabled=true; $("sugStop").hidden=false;
   sugSetStatus("Claude tänker… Det brukar ta mellan en halv och två minuter.");
@@ -4402,10 +4467,10 @@ async function sugGo(){
 }
 $("sugGo").onclick=sugGo; $("sugStop").onclick=()=>SUG.ctl&&SUG.ctl.abort();
 $("sugFile").onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
-  try{ const t=await f.text(); $("sugText").value=t; $("sugFileNote").textContent=`${f.name}, ${t.length.toLocaleString("sv-SE")} tecken${t.length>SUG_MAX?" (bara början skickas)":""}`; }
+  try{ const t=await f.text(); subsSet(f.name,t); subsStore(); }
   catch(_){ $("sugFileNote").textContent="Filen gick inte att läsa."; }
   e.target.value=""; };
-SAMPLEP.then(s=>{ if(s){ $("sugPanel").hidden=false; sugLoad(); } });
+SAMPLEP.then(s=>{ if(s){ $("sugPanel").hidden=false; sugLoad(); subsRestore(); } });
 if(!window.VideoEncoder||!M){ setStatus("Den här webbläsaren saknar stöd för videokodning. Öppna filen i Chrome på datorn.","err"); }
 </script>
 </body>
