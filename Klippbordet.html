@@ -4179,7 +4179,15 @@ const SAMPLEP=(window.claude&&window.claude.use)?window.claude.use("sample").cat
 const SUG_MAX=180000;
 function sugKey(){ const k=key(); return k?k+":forslag":null; }
 function sugSave(){ try{ const k=sugKey(); if(k) localStorage.setItem(k,JSON.stringify({list:SUG.list,tolk:$("sugTolk").textContent})); }catch(_){} }
-function sugLoad(){ SUG.list=[]; $("sugTolk").hidden=true; try{ const k=sugKey(); const d=k&&JSON.parse(localStorage.getItem(k)||"null"); if(d){ SUG.list=d.list||[]; if(d.tolk){ $("sugTolk").textContent=d.tolk; $("sugTolk").hidden=false; } } }catch(_){} sugRender(); }
+/* Förslag som gjorts innan ett avsnitt öppnats (eller medan ett annat var öppet och listan
+   för den här filen är tom) följer med till filen som öppnas, i stället för att försvinna. */
+function sugLoad(){
+  const carry=SUG.list.filter(x=>!x.added), carryTolk=$("sugTolk").textContent;
+  let d=null; try{ const k=sugKey(); d=k&&JSON.parse(localStorage.getItem(k)||"null"); }catch(_){}
+  if(d&&d.list&&d.list.length){ SUG.list=d.list; $("sugTolk").textContent=d.tolk||""; $("sugTolk").hidden=!d.tolk; }
+  else { SUG.list=carry; $("sugTolk").hidden=!(carry.length&&carryTolk); if(carry.length) sugSave(); }
+  sugRender();
+}
 function sugSetStatus(t,cls){ $("sugStatus").textContent=t; $("sugStatus").className=cls||"note"; }
 function sugPrompt(){
   const fps=S.fps||25, start=$("startTc").value||"01:00:00:00";
@@ -4245,14 +4253,19 @@ function sugAccept(data){
   }
   return added;
 }
-function sugLoadClip(x,which){
-  if(!S.dur) return sugSetStatus("Öppna avsnittet först, så kan klippet laddas.","warn");
-  const c=which==="svar"?x.svar:x.klipp; if(!c||!c.in||!c.ut) return sugSetStatus("Förslaget saknar giltiga tidkoder för klippet.","warn");
-  const fi=tcToFrames(c.in)-S.startTcFrames, fo=tcToFrames(c.ut)-S.startTcFrames;
-  if(fi<0||fo>=S.totalFrames||fo<fi) return sugSetStatus(`Tidkoderna ${c.in}–${c.ut} ligger utanför filen eller är omkastade. Kontrollera starttidkoden under Inställningar.`,"warn");
-  S.inF=fi; S.outF=fo; $("freeze").value=which==="svar"?0:(c.frys||0);
-  $("outName").value=which==="svar"?x.svar_media:x.media; checkName(); if(!vid.paused) vid.pause(); seekFrame(fi); saveStore(); updateUi();
-  sugSetStatus(`Laddade ${which==="svar"?"svarsklippet":"frågeklippet"} ${c.in}–${c.ut}. Lyssna med Spela IN→UT och justera innan du exporterar.`);
+/* Laddar ett föreslaget klipp. Svaret visas på kortet (msg), eftersom panelens statusrad ofta ligger utanför bild. */
+function sugLoadClip(x,which,msg){
+  const say=(t,cls)=>{ if(msg){ msg.textContent=t; msg.className=cls||"note"; msg.hidden=false; } else sugSetStatus(t,cls); };
+  try{
+    if(!S.dur) return say("Öppna avsnittet först (Öppna avsnitt… högst upp), så kan klippet laddas.","warn");
+    const c=which==="svar"?x.svar:x.klipp; if(!c||!c.in||!c.ut) return say("Förslaget saknar giltiga tidkoder för klippet.","warn");
+    const fi=tcToFrames(c.in)-S.startTcFrames, fo=tcToFrames(c.ut)-S.startTcFrames;
+    if(fi<0||fo>=S.totalFrames||fo<fi) return say(`Tidkoderna ${c.in}–${c.ut} ligger utanför filen (${srcTc(0)}–${srcTc(Math.max(0,S.totalFrames-1))}) eller är omkastade. Kontrollera starttidkoden under Inställningar, och raden "Tolkning av tiderna" ovan.`,"warn");
+    S.inF=fi; S.outF=fo; $("freeze").value=which==="svar"?0:(c.frys||0);
+    $("outName").value=which==="svar"?x.svar_media:x.media; checkName(); if(!vid.paused) vid.pause(); seekFrame(fi); saveStore(); updateUi();
+    say(`Laddat: ${c.in}–${c.ut} som ${which==="svar"?x.svar_media:x.media}. Lyssna med Spela IN→UT, justera och exportera.`);
+    const top=document.querySelector(".main"); if(top) top.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});
+  }catch(e){ console.error(e); say("Klippet kunde inte laddas: "+((e&&e.message)||e),"err"); }
 }
 function sugAdd(x){
   const q=newQ(); q.fraga=x.fraga; q.alternativ=x.alternativ.slice(); q.ratt=x.ratt; q.forklaring=x.forklaring; q.media=x.media; q.svar_media=x.svar_media;
@@ -4273,12 +4286,12 @@ function sugRender(){
     d.appendChild(t);
     if(x.underlag) d.appendChild(el("p","note","Underlag: ”"+x.underlag+"”"));
     if(x.osakerhet) d.appendChild(el("p","warn","Kontrollera: "+x.osakerhet));
-    const a=el("div","acts");
-    const b1=el("button","","Ladda frågeklippet"); b1.onclick=()=>sugLoadClip(x,"klipp"); a.appendChild(b1);
-    if(x.svar){ const b2=el("button","","Ladda svarsklippet"); b2.onclick=()=>sugLoadClip(x,"svar"); a.appendChild(b2); }
+    const a=el("div","acts"), msg=el("p","note"); msg.hidden=true; msg.setAttribute("role","status");
+    const b1=el("button","","Ladda frågeklippet"); b1.onclick=()=>sugLoadClip(x,"klipp",msg); a.appendChild(b1);
+    if(x.svar){ const b2=el("button","","Ladda svarsklippet"); b2.onclick=()=>sugLoadClip(x,"svar",msg); a.appendChild(b2); }
     const b3=el("button",x.added?"":"primary",x.added?"Tillagd":"Lägg till som fråga"); b3.disabled=x.added; b3.onclick=()=>sugAdd(x); a.appendChild(b3);
     const b4=el("button","","Ta bort"); b4.onclick=()=>{ SUG.list.splice(i,1); sugSave(); sugRender(); }; a.appendChild(b4);
-    d.appendChild(a); box.appendChild(d);
+    d.appendChild(a); d.appendChild(msg); box.appendChild(d);
   });
 }
 const SUG_ERR={not_granted:"Sidan fick inte använda Claude. Du kan ändra det under artifactens behörigheter.",sampling_disabled:"Claude är inte tillgängligt för ditt konto här.",
