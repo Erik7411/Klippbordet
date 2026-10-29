@@ -120,6 +120,15 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 .sug .acts{display:flex;flex-wrap:wrap;gap:6px}
 .sug .acts button{min-height:30px;padding:4px 8px;font-size:12px}
 .sug.added{border-color:var(--in)}
+.qhead{display:flex;gap:8px;align-items:baseline;justify-content:space-between}
+.qhead strong{font-size:13px;min-width:0;overflow-wrap:anywhere}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{font:11px var(--f-tc);padding:2px 6px;border-radius:4px;border:1px solid var(--line);color:var(--muted);overflow-wrap:anywhere}
+.chip.ok{color:var(--in);border-color:var(--in)}
+.chip.miss{color:var(--warn);border-color:var(--warn)}
+.q details{display:grid;gap:8px}
+.q details[open]>summary{margin-bottom:8px}
+.q .edit{display:grid;gap:8px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
@@ -195,9 +204,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <div class="bin" id="clips"></div>
         <p class="note" id="clipsEmpty">Inga klipp ännu. Bin sparas per avsnittsfil i den här webbläsaren.</p>
       </section>
-    </section>
 
-    <aside class="stage">
       <section class="panel" aria-labelledby="h-klipp">
         <h2 id="h-klipp">Klipp</h2>
         <div class="grid2">
@@ -216,6 +223,9 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <div class="note" id="convHint" hidden>Konvertera med ffmpeg (tidkoden följer med):
           <pre class="json" id="convCmd" style="margin-top:6px;user-select:all">ffmpeg -i avsnitt.mxf -c:v libx264 -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k avsnitt.mp4</pre></div>
       </section>
+    </section>
+
+    <aside class="stage">
 
       <section class="panel" aria-labelledby="h-sug" id="sugPanel" hidden>
         <h2 id="h-sug">Föreslå frågor med Claude</h2>
@@ -223,24 +233,26 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
           <textarea id="sugText" rows="6" placeholder="Klistra in undertext eller repliker med tidkoder, t.ex.&#10;01:17:19:17  Jag trodde aldrig att jag skulle …"></textarea></div>
         <div class="row"><label class="btn" for="sugFile" style="display:inline-flex;align-items:center">Läs in undertextfil…</label><input id="sugFile" type="file" accept=".txt,.srt,.vtt,.xif,.xml,.stl,text/*" hidden><span class="note" id="sugFileNote"></span></div>
         <div class="grid2">
-          <div class="field"><label for="sugN">Antal frågor</label><select id="sugN"><option>3</option><option selected>5</option><option>8</option></select></div>
+          <div class="field"><label for="sugN">Antal frågor</label><input id="sugN" type="number" min="1" max="20" step="1" value="5" inputmode="numeric"></div>
           <div class="field"><label for="sugType">Frågetyp</label><select id="sugType">
             <option value="">Blandat</option><option>Fullfölj repliken</option><option>Vad händer härnäst?</option><option>Vem sa det?</option><option>Vad fick hen höra?</option></select></div>
         </div>
         <div class="field"><label for="sugWish">Önskemål (valfritt)</label><input id="sugWish" placeholder="t.ex. bara scener med Anna och Johan, lätta frågor"></div>
         <div class="row"><button id="sugGo" class="primary">Föreslå frågor</button><button id="sugStop" hidden>Avbryt</button></div>
-        <p class="note" id="sugStatus">Claude läser bara texten, inte bild eller ljud. Lyssna igenom och justera IN och UT innan du exporterar.</p>
-        <p class="note" id="sugTolk" hidden></p>
+        <p class="note" id="sugStatus">Claude läser bara texten. Tidkoderna är ungefärliga, så lyssna och justera IN och UT innan du exporterar.</p>
         <div id="sugList" style="display:grid;gap:8px"></div>
       </section>
 
       <section class="panel" aria-labelledby="h-fragor">
-        <h2 id="h-fragor">Frågor och importtext</h2>
+        <h2 id="h-fragor">Färdiga frågor</h2>
+        <p class="note" id="qSummary">Inga frågor ännu.</p>
         <div id="qs" style="display:grid;gap:8px"></div>
         <button id="bAddQ">+ Ny fråga</button>
         <div class="sep"></div>
-        <pre class="json" id="json">[]</pre>
+        <button id="bZip" class="primary" disabled>Ladda ner frågepaket (.zip)</button>
+        <p class="note" id="zipNote">En mapp med importtexten och alla klipp, klar att ladda upp i Quiz i Play.</p>
         <div class="row"><button id="bCopy">Kopiera importtext</button><span class="note" id="copyMsg"></span></div>
+        <details><summary>Visa importtext</summary><pre class="json" id="json" style="margin-top:6px">[]</pre></details>
       </section>
 
       <section class="panel" aria-labelledby="h-inst">
@@ -3484,7 +3496,7 @@ async function openFile(file){
   } else { $("startTc").value="01:00:00:00"; $("startTc").dataset.src="antagen"; }
   S.startTcFrames=tcToFrames($("startTc").value)??tcToFrames("01:00:00:00");
   $("fpsNote").textContent=`Bildfrekvens: ${S.fps} rutor/s${S.df?" (drop frame)":""} · starttidkod ${$("startTc").value} (${$("startTc").dataset.src==="fil"?"läst ur filen":"antagen, kontrollera"})`;
-  loadStore(); suggestName(); renderAll(); sugLoad();
+  loadStore(); suggestName(); renderAll(); sugLoad(); blobRestore();
   vid.src=setUrl("vid",file);
 }
 vid.addEventListener("loadedmetadata",()=>{
@@ -4010,7 +4022,8 @@ async function exportClip(){
     setStatus(warn.length?warn.join(" "):"Klart. Lyssna igenom klippet innan det används.",warn.length?"warn":"note");
     const clip={name,inF,outF,freeze:freezeS,inTc:srcTc(inF),outTc:srcTc(outF)};
     S.clips=S.clips.filter(c=>c.name!==name); S.clips.push(clip); saveStore(); renderQs(); $("outName").value=""; suggestName();
-    recShow(clip); download(name);
+    recShow(clip); blobPut(name,blob);
+    if(!warn.length) setStatus(`Klart: ${name} ligger i bin och följer med i frågepaketet. Lyssna igenom innan det används.`);
   }catch(e){
     console.error(e); setStatus("Exporten misslyckades: "+(e&&e.message||e),"err");
   }finally{
@@ -4035,6 +4048,18 @@ async function saveBlob(blob,name){
   }
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+}
+/* Exporterade klipp sparas i webbläsaren (IndexedDB) per avsnittsfil, så att bin och frågepaket
+   finns kvar efter omladdning. Går det inte (privat fönster m.m.) finns de bara tills sidan stängs. */
+let _idb=null;
+function idb(){ if(_idb) return _idb; _idb=new Promise((res,rej)=>{ try{ const r=indexedDB.open("klippbordet",1); r.onupgradeneeded=()=>r.result.createObjectStore("blobs"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }catch(e){ rej(e); } }).catch(()=>null); return _idb; }
+async function blobPut(name,blob){ const k=key(); const db=await idb(); if(!db||!k) return; try{ db.transaction("blobs","readwrite").objectStore("blobs").put(blob,k+"|"+name); }catch(_){} }
+async function blobDel(name){ const k=key(); const db=await idb(); if(!db||!k) return; try{ db.transaction("blobs","readwrite").objectStore("blobs").delete(k+"|"+name); }catch(_){} }
+async function blobRestore(){
+  const k=key(), file=S.file; const db=await idb(); if(!db||!k) return;
+  const names=S.clips.map(c=>c.name).filter(n=>!S.blobs.has(n)); if(!names.length) return;
+  await Promise.all(names.map(n=>new Promise(res=>{ try{ const r=db.transaction("blobs").objectStore("blobs").get(k+"|"+n); r.onsuccess=()=>{ if(r.result&&S.file===file) S.blobs.set(n,r.result); res(); }; r.onerror=()=>res(); }catch(_){ res(); } })));
+  if(S.file===file){ renderClips(); renderQs(); }
 }
 function download(name){
   const blob=S.blobs.get(name); if(!blob) return;
@@ -4085,7 +4110,7 @@ function renderClips(){
     d.onkeydown=e=>{ if((e.key==="Enter"||e.key===" ")&&e.target===d){ e.preventDefault(); recShow(c); } };
     d.querySelector('[data-a="load"]').onclick=()=>{ S.inF=c.inF; S.outF=c.outF; $("freeze").value=c.freeze||0; $("outName").value=c.name; checkName(); seekFrame(c.inF); saveStore(); };
     const dl=d.querySelector('[data-a="dl"]'); if(dl) dl.onclick=()=>download(c.name);
-    d.querySelector('[data-a="del"]').onclick=()=>{ S.clips.splice(i,1); S.blobs.delete(c.name);
+    d.querySelector('[data-a="del"]').onclick=()=>{ S.clips.splice(i,1); S.blobs.delete(c.name); blobDel(c.name);
       if(REC.clip&&REC.clip.name===c.name) clearRec();
       S.qs.forEach(q=>{ if(q.media===c.name) q.media=""; if(q.svar_media===c.name) q.svar_media=""; });
       saveStore(); renderClips(); renderQs(); };
@@ -4095,13 +4120,19 @@ function renderClips(){
 
 /* ---------- frågor ---------- */
 function newQ(){ return {fraga:"",alternativ:["","","",""],ratt:"A",forklaring:"",media:"",svar_media:""}; }
+function qClipState(name){ if(!name) return null; return S.blobs.has(name)?"ok":"miss"; }
 function renderQs(){
   const box=$("qs"); box.innerHTML="";
-  const opts=['<option value="">(ingen)</option>'].concat(S.clips.map(c=>`<option>${c.name.replace(/</g,"&lt;")}</option>`)).join("");
+  const names=new Set(S.clips.map(c=>c.name)); S.qs.forEach(q=>{ if(q.media) names.add(q.media); if(q.svar_media) names.add(q.svar_media); });
+  const esc=t=>t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
+  const opts=['<option value="">(ingen)</option>'].concat([...names].map(n=>`<option value="${esc(n)}">${esc(n)}${S.blobs.has(n)?"":" (ej exporterat)"}</option>`)).join("");
   S.qs.forEach((q,i)=>{
     const d=document.createElement("div"); d.className="q";
+    const chip=(label,name)=>{ const st=qClipState(name); if(!st) return ""; return `<span class="chip ${st}">${label}: ${esc(name)} ${st==="ok"?"✓ klar":"· ej exporterat"}</span>`; };
     d.innerHTML=`
-      <div class="row" style="justify-content:space-between"><strong>Fråga ${i+1}</strong><button data-a="del" style="min-height:28px;padding:3px 8px;font-size:12px">Ta bort</button></div>
+      <div class="qhead"><strong>${i+1}. <span data-k="title"></span></strong><button data-a="del" style="min-height:28px;padding:3px 8px;font-size:12px">Ta bort</button></div>
+      <div class="chips">${chip("Fråga",q.media)}${chip("Svar",q.svar_media)}${!q.media?'<span class="chip">Inget frågeklipp</span>':""}</div>
+      <details${q.fraga?"":" open"}><summary>Redigera</summary><div class="edit">
       <div class="field"><label for="q${i}f">Frågetext</label><textarea id="q${i}f" data-k="fraga"></textarea></div>
       <div class="alts">${["A","B","C","D"].map((L,j)=>`<b>${L}</b><input id="q${i}a${j}" data-alt="${j}" aria-label="Alternativ ${L}">`).join("")}</div>
       <div class="grid2">
@@ -4109,13 +4140,25 @@ function renderQs(){
         <div class="field"><label for="q${i}m">Frågeklipp</label><select id="q${i}m" data-k="media">${opts}</select></div>
       </div>
       <div class="field"><label for="q${i}s">Svarsklipp (spelas efter svaret)</label><select id="q${i}s" data-k="svar_media">${opts}</select></div>
-      <div class="field"><label for="q${i}x">Förklaring (valfri)</label><input id="q${i}x" data-k="forklaring"></div>`;
-    d.querySelectorAll("[data-k]").forEach(el=>{ el.value=q[el.dataset.k]||(el.dataset.k==="ratt"?"A":""); el.oninput=el.onchange=()=>{ q[el.dataset.k]=el.value; saveStore(); renderJson(); }; });
+      <div class="field"><label for="q${i}x">Förklaring (valfri)</label><input id="q${i}x" data-k="forklaring"></div>
+      </div></details>`;
+    const title=d.querySelector('[data-k="title"]'); title.textContent=q.fraga||"(ny fråga)";
+    d.querySelectorAll(".edit [data-k]").forEach(el=>{ el.value=q[el.dataset.k]||(el.dataset.k==="ratt"?"A":"");
+      el.oninput=()=>{ q[el.dataset.k]=el.value; if(el.dataset.k==="fraga") title.textContent=q.fraga||"(ny fråga)"; saveStore(); renderJson(); qSummary(); };
+      el.onchange=()=>{ q[el.dataset.k]=el.value; saveStore(); if(el.tagName==="SELECT"&&el.dataset.k!=="ratt") renderQs(); else { renderJson(); qSummary(); } }; });
     d.querySelectorAll("[data-alt]").forEach(el=>{ el.value=q.alternativ[+el.dataset.alt]||""; el.oninput=()=>{ q.alternativ[+el.dataset.alt]=el.value; saveStore(); renderJson(); }; });
     d.querySelector('[data-a="del"]').onclick=()=>{ S.qs.splice(i,1); saveStore(); renderQs(); };
     box.appendChild(d);
   });
-  renderJson();
+  renderJson(); qSummary();
+}
+function qFiles(){ const set=new Set(); S.qs.forEach(q=>{ if(q.media) set.add(q.media); if(q.svar_media) set.add(q.svar_media); }); return [...set]; }
+function qSummary(){
+  const files=qFiles(), ready=files.filter(n=>S.blobs.has(n)), missing=files.filter(n=>!S.blobs.has(n));
+  $("qSummary").textContent=S.qs.length?`${S.qs.length} ${S.qs.length===1?"fråga":"frågor"} · ${ready.length} av ${files.length} klipp exporterade`:"Inga frågor ännu. Lägg till från förslagen eller med + Ny fråga.";
+  $("bZip").disabled=!S.qs.length;
+  $("zipNote").textContent=missing.length?`Saknas fortfarande: ${missing.join(", ")}. Exportera dem först, annars kommer de inte med i paketet.`:"En mapp med importtexten och alla klipp, klar att ladda upp i Quiz i Play.";
+  $("zipNote").className=missing.length?"warn":"note";
 }
 function buildJson(){
   return S.qs.map(q=>{ const o={fraga:q.fraga,alternativ:q.alternativ.slice(),ratt:q.ratt};
@@ -4129,6 +4172,49 @@ async function copyJson(){
   setTimeout(()=>$("copyMsg").textContent="",2500);
 }
 function renderAll(){ renderClips(); renderQs(); updateUi(); }
+/* Enkel zip utan komprimering (videon är redan komprimerad). Filnamn i UTF-8, så å, ä och ö följer med. */
+const CRC_T=(()=>{ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=c&1?0xEDB88320^(c>>>1):c>>>1; t[n]=c>>>0; } return t; })();
+function crc32(u8){ let c=0xFFFFFFFF; for(let i=0;i<u8.length;i++) c=CRC_T[(c^u8[i])&255]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+async function makeZip(entries){ // [{name, data:Blob|string}]
+  const enc=new TextEncoder(), parts=[], central=[]; let off=0;
+  const d=new Date(), dt=((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate(), tm=(d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1);
+  for(const e of entries){
+    const nm=enc.encode(e.name), dir=e.name.endsWith("/");
+    const u8=dir?new Uint8Array(0):(typeof e.data==="string"?enc.encode(e.data):new Uint8Array(await e.data.arrayBuffer()));
+    const crc=dir?0:crc32(u8), sz=u8.length;
+    const h=new DataView(new ArrayBuffer(30));
+    h.setUint32(0,0x04034b50,true); h.setUint16(4,20,true); h.setUint16(6,0x0800,true); h.setUint16(8,0,true); h.setUint16(10,tm,true); h.setUint16(12,dt,true);
+    h.setUint32(14,crc,true); h.setUint32(18,sz,true); h.setUint32(22,sz,true); h.setUint16(26,nm.length,true); h.setUint16(28,0,true);
+    parts.push(h.buffer,nm,u8);
+    const c=new DataView(new ArrayBuffer(46));
+    c.setUint32(0,0x02014b50,true); c.setUint16(4,20,true); c.setUint16(6,20,true); c.setUint16(8,0x0800,true); c.setUint16(10,0,true); c.setUint16(12,tm,true); c.setUint16(14,dt,true);
+    c.setUint32(16,crc,true); c.setUint32(20,sz,true); c.setUint32(24,sz,true); c.setUint16(28,nm.length,true); c.setUint32(38,dir?0x10:0,true); c.setUint32(42,off,true);
+    central.push(c.buffer,nm); off+=30+nm.length+sz;
+  }
+  const cdSize=central.reduce((a,b)=>a+(b.byteLength??b.length),0);
+  const end=new DataView(new ArrayBuffer(22));
+  end.setUint32(0,0x06054b50,true); end.setUint16(8,entries.length,true); end.setUint16(10,entries.length,true); end.setUint32(12,cdSize,true); end.setUint32(16,off,true);
+  return new Blob([...parts,...central,end.buffer],{type:"application/zip"});
+}
+function packageName(){
+  const pre=$("prefix").value.trim(), ep=S.ep!=null?pad(S.ep):"";
+  let base=pre||ep?`${pre}${ep}`:(S.file?S.file.name.replace(/\.[^.]+$/,""):"klippbordet");
+  base=base.replace(/[\\/:*?"<>|]+/g,"").replace(/\s+/g,"_").slice(0,60)||"klippbordet";
+  return "quiz_"+base;
+}
+async function downloadZip(){
+  if(!S.qs.length) return;
+  const files=qFiles(), have=files.filter(n=>S.blobs.has(n)), missing=files.filter(n=>!S.blobs.has(n));
+  const folder=packageName(), json=JSON.stringify(buildJson(),null,2);
+  const readme=`Frågepaket från Klippbordet\n\n1. Öppna adminpanelen i Quiz i Play och välj Importera frågor.\n2. Klistra in innehållet i importtext.txt.\n3. Välj alla filer i mappen "filer" på en gång.\n\nFrågor: ${S.qs.length}\nKlipp: ${have.length}${missing.length?`\nSaknas (exporterades inte): ${missing.join(", ")}`:""}\n`;
+  const entries=[{name:folder+"/"},{name:`${folder}/importtext.txt`,data:json},{name:`${folder}/läs mig.txt`,data:readme},{name:`${folder}/filer/`}];
+  have.forEach(n=>entries.push({name:`${folder}/filer/${n}`,data:S.blobs.get(n)}));
+  $("bZip").disabled=true; $("zipNote").textContent="Packar…"; $("zipNote").className="note";
+  try{ const z=await makeZip(entries); await saveBlob(z,folder+".zip");
+    $("zipNote").textContent=`${folder}.zip: ${S.qs.length} frågor, ${have.length} klipp${missing.length?`. Saknas: ${missing.join(", ")}`:""}.`; $("zipNote").className=missing.length?"warn":"note"; }
+  catch(e){ console.error(e); $("zipNote").textContent="Paketet kunde inte skapas: "+((e&&e.message)||e); $("zipNote").className="err"; }
+  finally{ $("bZip").disabled=!S.qs.length; }
+}
 
 /* ---------- händelser ---------- */
 $("file").onchange=e=>openFile(e.target.files[0]);
@@ -4142,7 +4228,7 @@ $("bBackS").onclick=()=>step(-fpsInt()); $("bFwdS").onclick=()=>step(fpsInt());
 $("bSetIn").onclick=setIn; $("bSetOut").onclick=setOut; $("bPlayClip").onclick=playClip;
 $("bStill").onclick=saveStill; $("bExport").onclick=exportClip; $("bDownload").onclick=()=>REC.clip&&download(REC.clip.name);
 $("bAddQ").onclick=()=>{ const q=newQ(); const n=S.clips.length; if(n) q.media=S.clips[n-1].name; S.qs.push(q); saveStore(); renderQs(); };
-$("bCopy").onclick=copyJson;
+$("bCopy").onclick=copyJson; $("bZip").onclick=downloadZip;
 const doGoto=()=>{ const f=parseInput($("goto").value); if(f==null) return setStatus("Tidkoden gick inte att tolka.","err"); if(!vid.paused) vid.pause(); seekFrame(f); };
 $("bGoto").onclick=doGoto; $("goto").onkeydown=e=>{ if(e.key==="Enter") doGoto(); };
 /* Tolkar en IN/UT-tidkod och godtar bara rutor som finns i filen. */
@@ -4178,14 +4264,14 @@ const SUG={list:[],ctl:null};
 const SAMPLEP=(window.claude&&window.claude.use)?window.claude.use("sample").catch(()=>null):Promise.resolve(null);
 const SUG_MAX=180000;
 function sugKey(){ const k=key(); return k?k+":forslag":null; }
-function sugSave(){ try{ const k=sugKey(); if(k) localStorage.setItem(k,JSON.stringify({list:SUG.list,tolk:$("sugTolk").textContent})); }catch(_){} }
+function sugSave(){ try{ const k=sugKey(); if(k) localStorage.setItem(k,JSON.stringify({list:SUG.list})); }catch(_){} }
 /* Förslag som gjorts innan ett avsnitt öppnats (eller medan ett annat var öppet och listan
    för den här filen är tom) följer med till filen som öppnas, i stället för att försvinna. */
 function sugLoad(){
-  const carry=SUG.list.filter(x=>!x.added), carryTolk=$("sugTolk").textContent;
+  const carry=SUG.list.filter(x=>!x.added);
   let d=null; try{ const k=sugKey(); d=k&&JSON.parse(localStorage.getItem(k)||"null"); }catch(_){}
-  if(d&&d.list&&d.list.length){ SUG.list=d.list; $("sugTolk").textContent=d.tolk||""; $("sugTolk").hidden=!d.tolk; }
-  else { SUG.list=carry; $("sugTolk").hidden=!(carry.length&&carryTolk); if(carry.length) sugSave(); }
+  if(d&&d.list&&d.list.length) SUG.list=d.list;
+  else { SUG.list=carry; if(carry.length) sugSave(); }
   sugRender();
 }
 function sugSetStatus(t,cls){ $("sugStatus").textContent=t; $("sugStatus").className=cls||"note"; }
@@ -4193,7 +4279,7 @@ function sugPrompt(){
   const fps=S.fps||25, start=$("startTc").value||"01:00:00:00";
   let text=$("sugText").value.trim(); let cut=false;
   if(text.length>SUG_MAX){ text=text.slice(0,SUG_MAX); cut=true; }
-  const n=+$("sugN").value||5, typ=$("sugType").value, wish=$("sugWish").value.trim();
+  const n=Math.max(1,Math.min(20,Math.round(+$("sugN").value)||5)), typ=$("sugType").value, wish=$("sugWish").value.trim();
   const finns=S.qs.map(q=>q.fraga).filter(Boolean);
   const p=`Du hjälper en redaktör på SVT att göra quizfrågor med videoklipp till "Quiz i Play". Underlaget nedan är repliker eller undertext ur ett tv-avsnitt. Du ser bara texten, inte bild eller ljud.
 
@@ -4215,13 +4301,13 @@ REDAKTIONELLA REGLER (viktiga)
 TIDKODER
 - Avsnittsfilen går i ${fps} bildrutor per sekund. Filens första bildruta har källtidkoden ${start}.
 - Ange alla tider som källtidkod HH:MM:SS:FF (FF = bildruta 00–${String(Math.round(fps)-1).padStart(2,"0")}).
-- Om underlagets tider räknas från filens början (t.ex. 00:05:03,880 eller 05:03:22), lägg till starttidkoden. Om de redan är källtidkoder, använd dem som de är. Skriv i fältet "tolkning" hur du tolkade underlagets tider.
+- Om underlagets tider räknas från filens början (t.ex. 00:05:03,880 eller 05:03:22), lägg till starttidkoden. Om de redan är källtidkoder, använd dem som de är.
 - Undertexttider är ungefärliga. Låt frågeklippet börja ungefär en halv sekund före första repliken och vara 3–10 sekunder långt. För "Fullfölj repliken": låt klippet sluta mitt i repliken, före de ord som ska gissas, och uppskatta tidpunkten utifrån var i undertextraden orden står. Skriv i "osakerhet" vad redaktören behöver lyssna efter.
 - Frysruta i slutet av frågeklippet: 2 sekunder för "Fullfölj repliken" och "Vad händer härnäst?", annars 0.
 ${finns.length?`\nFRÅGOR SOM REDAN FINNS (upprepa dem inte)\n${finns.map(f=>"- "+f).join("\n")}\n`:""}${wish?`\nREDAKTÖRENS ÖNSKEMÅL\n${wish}\n`:""}
 SVARSFORMAT
 Svara med enbart ett JSON-objekt i den här formen:
-{"tolkning":"hur du tolkade tiderna","fragor":[{"typ":"Fullfölj repliken","fraga":"Hur avslutar Anna meningen?","alternativ":["…","…","…","…"],"ratt":"B","forklaring":"kort text som visas efter svaret","klipp":{"in":"01:17:15:00","ut":"01:17:19:17","frys":2},"svar":{"in":"01:17:15:00","ut":"01:17:24:10"},"underlag":"den replik eller rad frågan bygger på, ordagrant","osakerhet":"vad som behöver kontrolleras"}]}
+{"fragor":[{"typ":"Fullfölj repliken","fraga":"Hur avslutar Anna meningen?","alternativ":["…","…","…","…"],"ratt":"B","forklaring":"kort text som visas efter svaret","klipp":{"in":"01:17:15:00","ut":"01:17:19:17","frys":2},"svar":{"in":"01:17:15:00","ut":"01:17:24:10"},"underlag":"den replik eller rad frågan bygger på, ordagrant","osakerhet":"vad som behöver kontrolleras"}]}
 "svar" får vara null om inget svarsklipp behövs. "ratt" är A, B, C eller D.
 
 UNDERLAG${cut?" (förkortat, för långt för att skicka helt)":""}
@@ -4238,7 +4324,6 @@ function sugTcOk(tc){ return typeof tc==="string" && tcToFrames(tc)!=null; }
 function sugAccept(data){
   const arr=Array.isArray(data)?data:(data&&Array.isArray(data.fragor)?data.fragor:null);
   if(!arr) throw new Error("Svaret hade inte rätt form.");
-  if(data&&data.tolkning){ $("sugTolk").textContent="Tolkning av tiderna: "+String(data.tolkning); $("sugTolk").hidden=false; }
   let added=0;
   for(const r of arr){
     if(!r||!r.fraga) continue;
@@ -4260,7 +4345,7 @@ function sugLoadClip(x,which,msg){
     if(!S.dur) return say("Öppna avsnittet först (Öppna avsnitt… högst upp), så kan klippet laddas.","warn");
     const c=which==="svar"?x.svar:x.klipp; if(!c||!c.in||!c.ut) return say("Förslaget saknar giltiga tidkoder för klippet.","warn");
     const fi=tcToFrames(c.in)-S.startTcFrames, fo=tcToFrames(c.ut)-S.startTcFrames;
-    if(fi<0||fo>=S.totalFrames||fo<fi) return say(`Tidkoderna ${c.in}–${c.ut} ligger utanför filen (${srcTc(0)}–${srcTc(Math.max(0,S.totalFrames-1))}) eller är omkastade. Kontrollera starttidkoden under Inställningar, och raden "Tolkning av tiderna" ovan.`,"warn");
+    if(fi<0||fo>=S.totalFrames||fo<fi) return say(`Tidkoderna ${c.in}–${c.ut} ligger utanför filen (${srcTc(0)}–${srcTc(Math.max(0,S.totalFrames-1))}) eller är omkastade. Kontrollera starttidkoden under Inställningar.`,"warn");
     S.inF=fi; S.outF=fo; $("freeze").value=which==="svar"?0:(c.frys||0);
     $("outName").value=which==="svar"?x.svar_media:x.media; checkName(); if(!vid.paused) vid.pause(); seekFrame(fi); saveStore(); updateUi();
     say(`Laddat: ${c.in}–${c.ut} som ${which==="svar"?x.svar_media:x.media}. Lyssna med Spela IN→UT, justera och exportera.`);
@@ -4279,13 +4364,6 @@ function sugRender(){
     if(x.typ) d.appendChild(el("div","typ",x.typ));
     d.appendChild(el("p","fr",x.fraga));
     const ol=el("ol"); ol.type="A"; x.alternativ.forEach((a,j)=>{ const li=el("li","ABCD"[j]===x.ratt?"ok":"",a+("ABCD"[j]===x.ratt?"  (rätt)":"")); ol.appendChild(li); }); d.appendChild(ol);
-    if(x.forklaring) d.appendChild(el("p","note","Förklaring: "+x.forklaring));
-    const t=el("div","tcs");
-    t.appendChild(el("span","",`Fråga: ${x.klipp.in||"?"} → ${x.klipp.ut||"?"}${x.klipp.frys?` + frys ${x.klipp.frys} s`:""} · ${x.media}`));
-    if(x.svar) t.appendChild(el("span","",`Svar: ${x.svar.in} → ${x.svar.ut} · ${x.svar_media}`));
-    d.appendChild(t);
-    if(x.underlag) d.appendChild(el("p","note","Underlag: ”"+x.underlag+"”"));
-    if(x.osakerhet) d.appendChild(el("p","warn","Kontrollera: "+x.osakerhet));
     const a=el("div","acts"), msg=el("p","note"); msg.hidden=true; msg.setAttribute("role","status");
     const b1=el("button","","Ladda frågeklippet"); b1.onclick=()=>sugLoadClip(x,"klipp",msg); a.appendChild(b1);
     if(x.svar){ const b2=el("button","","Ladda svarsklippet"); b2.onclick=()=>sugLoadClip(x,"svar",msg); a.appendChild(b2); }
@@ -4307,7 +4385,7 @@ async function sugGo(){
   try{
     const data=await sample.json(p,{signal:SUG.ctl.signal,cache:false,onText:({text})=>sugSetStatus(`Claude skriver förslag… ${text.length} tecken`)});
     const n=sugAccept(data); sugSave(); sugRender(); suggestName();
-    sugSetStatus(n?`${n} förslag klara${cut?" (underlaget förkortades)":""}. Ladda klippet, lyssna och justera, och lägg sedan till frågan.`:"Inga användbara förslag kom tillbaka. Prova med mer underlag.",n?"note":"warn");
+    sugSetStatus(n?`${n} förslag klara${cut?" (underlaget förkortades)":""}.`:"Inga användbara förslag kom tillbaka. Prova med mer underlag.",n?"note":"warn");
   }catch(e){
     if(e&&e.code==="cancelled") sugSetStatus("Avbrutet.");
     else if(e&&(e.code==="not_granted"||e.code==="sampling_disabled")){ sugSetStatus(SUG_ERR[e.code],"warn"); }
