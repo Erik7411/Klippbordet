@@ -12,6 +12,7 @@
   --bg:#121516; --panel:#1a1e20; --raise:#232829; --line:#2f3537;
   --fg:#e7ecec; --muted:#8e9a9c; --accent:#3fb3c2; --accent-ink:#06282d;
   --in:#5bc58a; --out:#e8645a; --warn:#e6b450;
+  --side:#14292c; --side-raise:#1b363a; --side-line:#2b4a4f;
   --f-ui:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-tc:"Martian Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   color-scheme:dark;
@@ -19,11 +20,13 @@
 @media (prefers-color-scheme: light){ :root:not([data-theme="dark"]){
   --bg:#eef1f1; --panel:#ffffff; --raise:#f4f6f6; --line:#d3dadb;
   --fg:#141819; --muted:#5b6668; --accent:#0d6f7e; --accent-ink:#ffffff;
-  --in:#1f8a50; --out:#c23b31; --warn:#9a6a00; color-scheme:light } }
+  --in:#1f8a50; --out:#c23b31; --warn:#9a6a00;
+  --side:#e2eff0; --side-raise:#f3f9f9; --side-line:#bdd8db; color-scheme:light } }
 :root[data-theme="light"]{
   --bg:#eef1f1; --panel:#ffffff; --raise:#f4f6f6; --line:#d3dadb;
   --fg:#141819; --muted:#5b6668; --accent:#0d6f7e; --accent-ink:#ffffff;
-  --in:#1f8a50; --out:#c23b31; --warn:#9a6a00; color-scheme:light }
+  --in:#1f8a50; --out:#c23b31; --warn:#9a6a00;
+  --side:#e2eff0; --side-raise:#f3f9f9; --side-line:#bdd8db; color-scheme:light }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{margin:0}
@@ -36,6 +39,8 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px}
 .main{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px;align-items:start}
 @media (max-width:1050px){.main{grid-template-columns:minmax(0,1fr)}}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;display:grid;gap:12px;min-width:0}
+/* Högerspalten får en egen ton i accentfärgen; allt inuti ärver den via tokens. */
+aside.side{--panel:var(--side);--raise:var(--side-raise);--line:var(--side-line)}
 .panel h2{margin:0;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
 .stage{display:grid;gap:10px;min-width:0}
 .screen{position:relative;background:#000;border-radius:6px;overflow:hidden;aspect-ratio:16/9;max-width:100%}
@@ -225,7 +230,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
       </section>
     </section>
 
-    <aside class="stage">
+    <aside class="stage side">
 
       <section class="panel" aria-labelledby="h-sug" id="sugPanel" hidden>
         <h2 id="h-sug">Föreslå frågor med Claude</h2>
