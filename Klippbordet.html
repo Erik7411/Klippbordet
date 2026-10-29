@@ -111,6 +111,15 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 .card .acts{display:flex;gap:4px;padding:4px 8px 8px}
 .card .acts button{min-height:28px;padding:3px 7px;font-size:11.5px;white-space:nowrap}
 .card .acts [data-a="del"]{margin-left:auto}
+.sug{display:grid;gap:8px;background:var(--raise);border:1px solid var(--line);border-radius:6px;padding:10px;min-width:0}
+.sug .typ{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--accent)}
+.sug .fr{font-weight:600;margin:0}
+.sug ol{margin:0;padding-left:20px;display:grid;gap:2px}
+.sug li.ok{color:var(--in);font-weight:600}
+.sug .tcs{font:11.5px var(--f-tc);color:var(--muted);display:grid;gap:2px}
+.sug .acts{display:flex;flex-wrap:wrap;gap:6px}
+.sug .acts button{min-height:30px;padding:4px 8px;font-size:12px}
+.sug.added{border-color:var(--in)}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
@@ -206,6 +215,23 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <p class="note" id="status"></p>
         <div class="note" id="convHint" hidden>Konvertera med ffmpeg (tidkoden följer med):
           <pre class="json" id="convCmd" style="margin-top:6px;user-select:all">ffmpeg -i avsnitt.mxf -c:v libx264 -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k avsnitt.mp4</pre></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-sug" id="sugPanel" hidden>
+        <h2 id="h-sug">Föreslå frågor med Claude</h2>
+        <div class="field"><label for="sugText">Underlag: repliker eller undertext med tidkoder</label>
+          <textarea id="sugText" rows="6" placeholder="Klistra in undertext eller repliker med tidkoder, t.ex.&#10;01:17:19:17  Jag trodde aldrig att jag skulle …"></textarea></div>
+        <div class="row"><label class="btn" for="sugFile" style="display:inline-flex;align-items:center">Läs in undertextfil…</label><input id="sugFile" type="file" accept=".txt,.srt,.vtt,.xif,.xml,.stl,text/*" hidden><span class="note" id="sugFileNote"></span></div>
+        <div class="grid2">
+          <div class="field"><label for="sugN">Antal frågor</label><select id="sugN"><option>3</option><option selected>5</option><option>8</option></select></div>
+          <div class="field"><label for="sugType">Frågetyp</label><select id="sugType">
+            <option value="">Blandat</option><option>Fullfölj repliken</option><option>Vad händer härnäst?</option><option>Vem sa det?</option><option>Vad fick hen höra?</option></select></div>
+        </div>
+        <div class="field"><label for="sugWish">Önskemål (valfritt)</label><input id="sugWish" placeholder="t.ex. bara scener med Anna och Johan, lätta frågor"></div>
+        <div class="row"><button id="sugGo" class="primary">Föreslå frågor</button><button id="sugStop" hidden>Avbryt</button></div>
+        <p class="note" id="sugStatus">Claude läser bara texten, inte bild eller ljud. Lyssna igenom och justera IN och UT innan du exporterar.</p>
+        <p class="note" id="sugTolk" hidden></p>
+        <div id="sugList" style="display:grid;gap:8px"></div>
       </section>
 
       <section class="panel" aria-labelledby="h-fragor">
@@ -3458,7 +3484,7 @@ async function openFile(file){
   } else { $("startTc").value="01:00:00:00"; $("startTc").dataset.src="antagen"; }
   S.startTcFrames=tcToFrames($("startTc").value)??tcToFrames("01:00:00:00");
   $("fpsNote").textContent=`Bildfrekvens: ${S.fps} rutor/s${S.df?" (drop frame)":""} · starttidkod ${$("startTc").value} (${$("startTc").dataset.src==="fil"?"läst ur filen":"antagen, kontrollera"})`;
-  loadStore(); suggestName(); renderAll();
+  loadStore(); suggestName(); renderAll(); sugLoad();
   vid.src=setUrl("vid",file);
 }
 vid.addEventListener("loadedmetadata",()=>{
@@ -3830,6 +3856,7 @@ function suggestName(){
   const ep=S.ep!=null?pad(S.ep):"";
   const head=(pre||ep)?`${pre}${ep}_`:"";
   let n=1; const names=new Set(S.clips.map(c=>c.name));
+  try{ SUG.list.forEach(x=>{ if(!x.added){ names.add(x.media); if(x.svar_media) names.add(x.svar_media); } }); }catch(_){}
   let nm; do{ nm=`${head}klipp${pad(n)}.mp4`; n++; }while(names.has(nm));
   $("outName").placeholder=nm; checkName();
 }
@@ -3993,18 +4020,31 @@ async function exportClip(){
 }
 /* Ger en blob-URL för en plats ("vid", "res") och frigör den förra, så att gamla filer inte ligger kvar i minnet. */
 function setUrl(slot,blob){ if(S.urls[slot]) URL.revokeObjectURL(S.urls[slot]); return S.urls[slot]=URL.createObjectURL(blob); }
-function download(name){
-  const blob=S.blobs.get(name); if(!blob) return;
+/* Spara en fil. Inne i claude.ai blockeras vanliga nedladdningar, så där används
+   claude.ais egen spara-funktion (du får bekräfta varje fil). Annars en vanlig nedladdning. */
+const DLP=(window.claude&&window.claude.use)?window.claude.use("downloads").catch(()=>null):Promise.resolve(null);
+async function saveBlob(blob,name){
+  const dl=await DLP;
+  if(dl){
+    try{ await dl.save({filename:name,data:blob}); setStatus(`Sparade ${name}.`); }
+    catch(e){ const c=e&&e.code;
+      if(c==="declined") setStatus(`${name} sparades inte.`,"note");
+      else if(c==="rate_limited") setStatus("En spara-ruta är redan öppen. Vänta lite och försök igen.","warn");
+      else setStatus(`Kunde inte spara ${name} (${c||"okänt fel"}).`,"warn"); }
+    return;
+  }
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+}
+function download(name){
+  const blob=S.blobs.get(name); if(!blob) return;
+  saveBlob(blob,name);
 }
 function saveStill(){
   if(!S.dur||!vid.videoWidth) return;
   const c=document.createElement("canvas"); c.width=vid.videoWidth; c.height=vid.videoHeight;
   c.getContext("2d").drawImage(vid,0,0);
-  c.toBlob(b=>{ const a=document.createElement("a"); a.href=URL.createObjectURL(b); setTimeout(()=>URL.revokeObjectURL(a.href),60000);
-    a.download=`${($("prefix").value||"bild").trim()}${S.ep!=null?pad(S.ep):""}_ruta_${srcTc(curF).replace(/[:;]/g,"-")}.png`;
-    document.body.appendChild(a); a.click(); a.remove(); },"image/png");
+  c.toBlob(b=>{ if(b) saveBlob(b,`${($("prefix").value||"bild").trim()}${S.ep!=null?pad(S.ep):""}_ruta_${srcTc(curF).replace(/[:;]/g,"-")}.png`); },"image/png");
 }
 
 /* ---------- lagring per fil ---------- */
@@ -4132,6 +4172,141 @@ document.addEventListener("keydown",e=>{
   else if(k==="+"||k==="=") tlZoom(0.5);
   else if(k==="-"||k==="_") tlZoom(2);
 });
+/* ---------- förslag från Claude ----------
+   Fungerar bara när sidan öppnas i claude.ai (förmågan "sample"). Annars är panelen dold. */
+const SUG={list:[],ctl:null};
+const SAMPLEP=(window.claude&&window.claude.use)?window.claude.use("sample").catch(()=>null):Promise.resolve(null);
+const SUG_MAX=180000;
+function sugKey(){ const k=key(); return k?k+":forslag":null; }
+function sugSave(){ try{ const k=sugKey(); if(k) localStorage.setItem(k,JSON.stringify({list:SUG.list,tolk:$("sugTolk").textContent})); }catch(_){} }
+function sugLoad(){ SUG.list=[]; $("sugTolk").hidden=true; try{ const k=sugKey(); const d=k&&JSON.parse(localStorage.getItem(k)||"null"); if(d){ SUG.list=d.list||[]; if(d.tolk){ $("sugTolk").textContent=d.tolk; $("sugTolk").hidden=false; } } }catch(_){} sugRender(); }
+function sugSetStatus(t,cls){ $("sugStatus").textContent=t; $("sugStatus").className=cls||"note"; }
+function sugPrompt(){
+  const fps=S.fps||25, start=$("startTc").value||"01:00:00:00";
+  let text=$("sugText").value.trim(); let cut=false;
+  if(text.length>SUG_MAX){ text=text.slice(0,SUG_MAX); cut=true; }
+  const n=+$("sugN").value||5, typ=$("sugType").value, wish=$("sugWish").value.trim();
+  const finns=S.qs.map(q=>q.fraga).filter(Boolean);
+  const p=`Du hjälper en redaktör på SVT att göra quizfrågor med videoklipp till "Quiz i Play". Underlaget nedan är repliker eller undertext ur ett tv-avsnitt. Du ser bara texten, inte bild eller ljud.
+
+UPPGIFT
+Föreslå ${n} flervalsfrågor${typ?` av typen "${typ}"`:""}. Varje fråga har ett frågeklipp ur avsnittet och, när det passar, ett svarsklipp som visas efter att spelaren svarat.
+
+FRÅGETYPER SOM FUNGERAR
+- Fullfölj repliken: klippet bryts mitt i en mening, med frysruta, och fyra möjliga fortsättningar. Svarsklippet är samma scen som fortsätter, så att facit hörs. Den starkaste formen.
+- Vad händer härnäst?: klippet stannar före en reaktion eller ett beslut. Svarsklippet visar fortsättningen.
+- Vem sa det?: repliken hörs medan den som talar inte syns. Alternativen är fyra personer i avsnittet. Används bara om underlaget visar vem som talar.
+- Vad fick hen höra?: klipp på en reaktion utan sammanhang.
+
+REDAKTIONELLA REGLER (viktiga)
+- Hitta aldrig på fakta om verkliga personer. Allt rätt svar ska stå i underlaget.
+- Felaktiga alternativ ska vara lika långa och lika konkreta som det rätta, så att svaret inte går att gissa på formen. Kontrollera att inget påhittat alternativ råkar vara sant enligt underlaget.
+- Bygger frågan på ett tveksamt påstående i programmet, formulera den som "enligt X" och reda ut det i förklaringen.
+- Skriv på svenska.
+
+TIDKODER
+- Avsnittsfilen går i ${fps} bildrutor per sekund. Filens första bildruta har källtidkoden ${start}.
+- Ange alla tider som källtidkod HH:MM:SS:FF (FF = bildruta 00–${String(Math.round(fps)-1).padStart(2,"0")}).
+- Om underlagets tider räknas från filens början (t.ex. 00:05:03,880 eller 05:03:22), lägg till starttidkoden. Om de redan är källtidkoder, använd dem som de är. Skriv i fältet "tolkning" hur du tolkade underlagets tider.
+- Undertexttider är ungefärliga. Låt frågeklippet börja ungefär en halv sekund före första repliken och vara 3–10 sekunder långt. För "Fullfölj repliken": låt klippet sluta mitt i repliken, före de ord som ska gissas, och uppskatta tidpunkten utifrån var i undertextraden orden står. Skriv i "osakerhet" vad redaktören behöver lyssna efter.
+- Frysruta i slutet av frågeklippet: 2 sekunder för "Fullfölj repliken" och "Vad händer härnäst?", annars 0.
+${finns.length?`\nFRÅGOR SOM REDAN FINNS (upprepa dem inte)\n${finns.map(f=>"- "+f).join("\n")}\n`:""}${wish?`\nREDAKTÖRENS ÖNSKEMÅL\n${wish}\n`:""}
+SVARSFORMAT
+Svara med enbart ett JSON-objekt i den här formen:
+{"tolkning":"hur du tolkade tiderna","fragor":[{"typ":"Fullfölj repliken","fraga":"Hur avslutar Anna meningen?","alternativ":["…","…","…","…"],"ratt":"B","forklaring":"kort text som visas efter svaret","klipp":{"in":"01:17:15:00","ut":"01:17:19:17","frys":2},"svar":{"in":"01:17:15:00","ut":"01:17:24:10"},"underlag":"den replik eller rad frågan bygger på, ordagrant","osakerhet":"vad som behöver kontrolleras"}]}
+"svar" får vara null om inget svarsklipp behövs. "ratt" är A, B, C eller D.
+
+UNDERLAG${cut?" (förkortat, för långt för att skicka helt)":""}
+${text}`;
+  return {p,cut};
+}
+function sugNextNames(withAnswer){
+  const pre=$("prefix").value.trim(), ep=S.ep!=null?pad(S.ep):"", head=(pre||ep)?`${pre}${ep}_`:"";
+  const used=new Set(S.clips.map(c=>c.name)); SUG.list.forEach(x=>{ used.add(x.media); if(x.svar_media) used.add(x.svar_media); });
+  let n=1; while(used.has(`${head}klipp${pad(n)}.mp4`)||used.has(`${head}klipp${pad(n)}_svar.mp4`)) n++;
+  return {media:`${head}klipp${pad(n)}.mp4`, svar_media:withAnswer?`${head}klipp${pad(n)}_svar.mp4`:""};
+}
+function sugTcOk(tc){ return typeof tc==="string" && tcToFrames(tc)!=null; }
+function sugAccept(data){
+  const arr=Array.isArray(data)?data:(data&&Array.isArray(data.fragor)?data.fragor:null);
+  if(!arr) throw new Error("Svaret hade inte rätt form.");
+  if(data&&data.tolkning){ $("sugTolk").textContent="Tolkning av tiderna: "+String(data.tolkning); $("sugTolk").hidden=false; }
+  let added=0;
+  for(const r of arr){
+    if(!r||!r.fraga) continue;
+    const alt=Array.isArray(r.alternativ)?r.alternativ.slice(0,4).map(String):[]; while(alt.length<4) alt.push("");
+    let ratt=String(r.ratt??"A").trim().toUpperCase(); if(/^[0-3]$/.test(ratt)) ratt="ABCD"[+ratt]; if(!"ABCD".includes(ratt)||ratt.length!==1) ratt="A";
+    const k=r.klipp||{}, sv=r.svar&&sugTcOk(r.svar.in)&&sugTcOk(r.svar.ut)?{in:r.svar.in,ut:r.svar.ut}:null;
+    const names=sugNextNames(!!sv);
+    SUG.list.push({typ:String(r.typ||""),fraga:String(r.fraga),alternativ:alt,ratt,forklaring:String(r.forklaring||""),
+      klipp:{in:sugTcOk(k.in)?k.in:"",ut:sugTcOk(k.ut)?k.ut:"",frys:Math.max(0,Math.min(20,+k.frys||0))},svar:sv,
+      underlag:String(r.underlag||""),osakerhet:String(r.osakerhet||""),media:names.media,svar_media:names.svar_media,added:false});
+    added++;
+  }
+  return added;
+}
+function sugLoadClip(x,which){
+  if(!S.dur) return sugSetStatus("Öppna avsnittet först, så kan klippet laddas.","warn");
+  const c=which==="svar"?x.svar:x.klipp; if(!c||!c.in||!c.ut) return sugSetStatus("Förslaget saknar giltiga tidkoder för klippet.","warn");
+  const fi=tcToFrames(c.in)-S.startTcFrames, fo=tcToFrames(c.ut)-S.startTcFrames;
+  if(fi<0||fo>=S.totalFrames||fo<fi) return sugSetStatus(`Tidkoderna ${c.in}–${c.ut} ligger utanför filen eller är omkastade. Kontrollera starttidkoden under Inställningar.`,"warn");
+  S.inF=fi; S.outF=fo; $("freeze").value=which==="svar"?0:(c.frys||0);
+  $("outName").value=which==="svar"?x.svar_media:x.media; checkName(); if(!vid.paused) vid.pause(); seekFrame(fi); saveStore(); updateUi();
+  sugSetStatus(`Laddade ${which==="svar"?"svarsklippet":"frågeklippet"} ${c.in}–${c.ut}. Lyssna med Spela IN→UT och justera innan du exporterar.`);
+}
+function sugAdd(x){
+  const q=newQ(); q.fraga=x.fraga; q.alternativ=x.alternativ.slice(); q.ratt=x.ratt; q.forklaring=x.forklaring; q.media=x.media; q.svar_media=x.svar_media;
+  S.qs.push(q); x.added=true; saveStore(); sugSave(); renderQs(); sugRender();
+}
+function sugRender(){
+  const box=$("sugList"); box.innerHTML="";
+  SUG.list.forEach((x,i)=>{
+    const d=document.createElement("div"); d.className="sug"+(x.added?" added":"");
+    const el=(tag,cls,txt)=>{ const e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; };
+    if(x.typ) d.appendChild(el("div","typ",x.typ));
+    d.appendChild(el("p","fr",x.fraga));
+    const ol=el("ol"); ol.type="A"; x.alternativ.forEach((a,j)=>{ const li=el("li","ABCD"[j]===x.ratt?"ok":"",a+("ABCD"[j]===x.ratt?"  (rätt)":"")); ol.appendChild(li); }); d.appendChild(ol);
+    if(x.forklaring) d.appendChild(el("p","note","Förklaring: "+x.forklaring));
+    const t=el("div","tcs");
+    t.appendChild(el("span","",`Fråga: ${x.klipp.in||"?"} → ${x.klipp.ut||"?"}${x.klipp.frys?` + frys ${x.klipp.frys} s`:""} · ${x.media}`));
+    if(x.svar) t.appendChild(el("span","",`Svar: ${x.svar.in} → ${x.svar.ut} · ${x.svar_media}`));
+    d.appendChild(t);
+    if(x.underlag) d.appendChild(el("p","note","Underlag: ”"+x.underlag+"”"));
+    if(x.osakerhet) d.appendChild(el("p","warn","Kontrollera: "+x.osakerhet));
+    const a=el("div","acts");
+    const b1=el("button","","Ladda frågeklippet"); b1.onclick=()=>sugLoadClip(x,"klipp"); a.appendChild(b1);
+    if(x.svar){ const b2=el("button","","Ladda svarsklippet"); b2.onclick=()=>sugLoadClip(x,"svar"); a.appendChild(b2); }
+    const b3=el("button",x.added?"":"primary",x.added?"Tillagd":"Lägg till som fråga"); b3.disabled=x.added; b3.onclick=()=>sugAdd(x); a.appendChild(b3);
+    const b4=el("button","","Ta bort"); b4.onclick=()=>{ SUG.list.splice(i,1); sugSave(); sugRender(); }; a.appendChild(b4);
+    d.appendChild(a); box.appendChild(d);
+  });
+}
+const SUG_ERR={not_granted:"Sidan fick inte använda Claude. Du kan ändra det under artifactens behörigheter.",sampling_disabled:"Claude är inte tillgängligt för ditt konto här.",
+  rate_limited:"För många förfrågningar just nu, eller så är din användningsgräns nådd. Försök igen om en stund.",prompt_too_large:"Underlaget är för långt. Klistra in en kortare del av avsnittet.",
+  refused:"Claude avböjde att svara på det här underlaget. Prova att formulera önskemålet annorlunda.",invalid_json:"Svaret gick inte att läsa. Försök igen, eller be om färre frågor.",
+  empty_completion:"Claude svarade inte. Försök igen med kortare underlag.",session_expired:"Du behöver logga in på claude.ai igen.",upstream_error:"Anslutningen bröts. Försök igen."};
+async function sugGo(){
+  const sample=await SAMPLEP; if(!sample) return;
+  if(!$("sugText").value.trim()) return sugSetStatus("Klistra in repliker eller undertext först, eller läs in en undertextfil.","warn");
+  const {p,cut}=sugPrompt();
+  SUG.ctl=new AbortController(); $("sugGo").disabled=true; $("sugStop").hidden=false;
+  sugSetStatus("Claude tänker… Det brukar ta mellan en halv och två minuter.");
+  try{
+    const data=await sample.json(p,{signal:SUG.ctl.signal,cache:false,onText:({text})=>sugSetStatus(`Claude skriver förslag… ${text.length} tecken`)});
+    const n=sugAccept(data); sugSave(); sugRender(); suggestName();
+    sugSetStatus(n?`${n} förslag klara${cut?" (underlaget förkortades)":""}. Ladda klippet, lyssna och justera, och lägg sedan till frågan.`:"Inga användbara förslag kom tillbaka. Prova med mer underlag.",n?"note":"warn");
+  }catch(e){
+    if(e&&e.code==="cancelled") sugSetStatus("Avbrutet.");
+    else if(e&&(e.code==="not_granted"||e.code==="sampling_disabled")){ sugSetStatus(SUG_ERR[e.code],"warn"); }
+    else sugSetStatus(SUG_ERR[e&&e.code]||("Något gick fel: "+((e&&(e.message||e.code))||e)),"warn");
+  }finally{ $("sugGo").disabled=false; $("sugStop").hidden=true; SUG.ctl=null; }
+}
+$("sugGo").onclick=sugGo; $("sugStop").onclick=()=>SUG.ctl&&SUG.ctl.abort();
+$("sugFile").onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
+  try{ const t=await f.text(); $("sugText").value=t; $("sugFileNote").textContent=`${f.name}, ${t.length.toLocaleString("sv-SE")} tecken${t.length>SUG_MAX?" (bara början skickas)":""}`; }
+  catch(_){ $("sugFileNote").textContent="Filen gick inte att läsa."; }
+  e.target.value=""; };
+SAMPLEP.then(s=>{ if(s){ $("sugPanel").hidden=false; sugLoad(); } });
 if(!window.VideoEncoder||!M){ setStatus("Den här webbläsaren saknar stöd för videokodning. Öppna filen i Chrome på datorn.","err"); }
 </script>
 </body>
