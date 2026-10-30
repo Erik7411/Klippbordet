@@ -128,6 +128,11 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 .sug .acts{display:flex;flex-wrap:wrap;gap:6px}
 .sug .acts button{min-height:30px;padding:4px 8px;font-size:12px}
 .sug.added{border-color:var(--in)}
+.sug .imgs{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.sug .imgs figure{margin:0;position:relative;border:2px solid transparent;border-radius:5px;overflow:hidden;background:#000}
+.sug .imgs figure.ok{border-color:var(--in)}
+.sug .imgs img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover}
+.sug .imgs figcaption{position:absolute;left:4px;top:4px;width:22px;height:22px;border-radius:50%;background:#0D6F7E;color:#fff;font:700 12px/22px var(--f-ui);text-align:center}
 .qhead{display:flex;gap:8px;align-items:baseline;justify-content:space-between}
 .qhead strong{font-size:13px;min-width:0;overflow-wrap:anywhere}
 .chips{display:flex;flex-wrap:wrap;gap:4px}
@@ -247,7 +252,13 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <div class="grid2">
           <div class="field"><label for="sugN">Antal frågor</label><input id="sugN" type="number" min="1" max="20" step="1" value="5" inputmode="numeric"></div>
           <div class="field"><label for="sugType">Frågetyp</label><select id="sugType">
-            <option value="">Blandat</option><option>Fullfölj repliken</option><option>Vad händer härnäst?</option><option>Vem sa det?</option><option>Vad fick hen höra?</option></select></div>
+            <option value="">Blandat</option><option>Fullfölj repliken</option><option>Vad händer härnäst?</option><option>Vem sa det?</option><option>Vad fick hen höra?</option>
+            <optgroup label="Kräver bildrutor"><option>Vem kommer in i rummet?</option><option>Vilken bild är rätt?</option><option>Vilket ansiktsuttryck?</option><option>Detaljen</option></optgroup></select></div>
+        </div>
+        <div id="sugImgBox" hidden style="display:grid;gap:8px">
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px"><input id="sugImg" type="checkbox" style="width:auto"> Låt Claude se bildrutor ur avsnittet</label>
+          <div class="field" id="sugRangeField" hidden><label for="sugRange">Bildrutor från</label><select id="sugRange"><option value="all">Hela avsnittet</option><option value="io">Bara mellan IN och UT (markera en scen först)</option></select></div>
+          <p class="note" id="sugImgNote" hidden></p>
         </div>
         <div class="field"><label for="sugWish">Önskemål (valfritt)</label><input id="sugWish" placeholder="t.ex. bara scener med Anna och Johan, lätta frågor"></div>
         <div class="row"><button id="sugGo" class="primary">Föreslå frågor</button><button id="sugStop" hidden>Avbryt</button></div>
@@ -4069,7 +4080,7 @@ async function blobPut(name,blob){ const k=key(); const db=await idb(); if(!db||
 async function blobDel(name){ const k=key(); const db=await idb(); if(!db||!k) return; try{ db.transaction("blobs","readwrite").objectStore("blobs").delete(k+"|"+name); }catch(_){} }
 async function blobRestore(){
   const k=key(), file=S.file; const db=await idb(); if(!db||!k) return;
-  const names=S.clips.map(c=>c.name).filter(n=>!S.blobs.has(n)); if(!names.length) return;
+  const names=[...new Set(S.clips.map(c=>c.name).concat(qFiles()))].filter(n=>!S.blobs.has(n)); if(!names.length) return;
   await Promise.all(names.map(n=>new Promise(res=>{ try{ const r=db.transaction("blobs").objectStore("blobs").get(k+"|"+n); r.onsuccess=()=>{ if(r.result&&S.file===file) S.blobs.set(n,r.result); res(); }; r.onerror=()=>res(); }catch(_){ res(); } })));
   if(S.file===file){ renderClips(); renderQs(); }
 }
@@ -4336,6 +4347,57 @@ async function subsRestore(){ const db=await idb(); if(!db) return;
   await new Promise(res=>{ try{ const r=db.transaction("blobs").objectStore("blobs").get("subs:senaste"); r.onsuccess=()=>{ if(r.result&&r.result.text&&!SUBS.text) subsSet(r.result.name,r.result.text); res(); }; r.onerror=()=>res(); }catch(_){ res(); } }); }
 $("sugFileDel").onclick=async()=>{ subsSet("",""); $("sugEp").dataset.manual=""; const db=await idb(); if(db) try{ db.transaction("blobs","readwrite").objectStore("blobs").delete("subs:senaste"); }catch(_){} };
 $("sugEp").onchange=()=>{ $("sugEp").dataset.manual="1"; subsRender(); };
+/* ---- Bildrutor till Claude ----
+   Rutorna tas ur videon här i webbläsaren, märks med nummer och tidkod och skickas med förfrågan.
+   Claude hänvisar till dem med nummer, så att tidkoderna blir exakta. */
+const SIMG={lim:null,frames:[]}; // frames: [{no,f,tc,url}]
+let stillCache={file:null,sinks:{}};
+async function stillSink(h){
+  if(stillCache.file!==S.file) stillCache={file:S.file,sinks:{}};
+  if(!stillCache.sinks[h]){ stillCache.sinks[h]=(async()=>{ const inp=new M.Input({source:new M.BlobSource(S.file),formats:M.ALL_FORMATS}); const vt=await inp.getPrimaryVideoTrack(); if(!vt||!(await vt.canDecode())) throw new Error("Videon kan inte avkodas."); return new M.CanvasSink(vt,{height:h}); })(); }
+  return stillCache.sinks[h];
+}
+const toBlob=(c,type,q)=>new Promise((res,rej)=>{ if(c.convertToBlob) c.convertToBlob({type,quality:q}).then(res,rej); else c.toBlob(b=>b?res(b):rej(new Error("Bilden kunde inte skapas.")),type,q); });
+async function grabFrames(count,signal,onProg){
+  const sink=await stillSink(432);
+  let a=0,b=S.totalFrames-1;
+  if($("sugRange").value==="io"){ if(S.inF==null||S.outF==null) throw new Error("Sätt IN och UT runt scenen först, eller välj Hela avsnittet."); a=S.inF; b=S.outF; }
+  else { const m=Math.round(S.totalFrames*0.01); a+=m; b-=m; }
+  const n=Math.max(1,Math.min(count,b-a+1)), fr=[...new Set(Array.from({length:n},(_,k)=>Math.round(a+(b-a)*(n===1?0.5:k/(n-1)))))];
+  SIMG.frames.forEach(x=>URL.revokeObjectURL(x.url)); SIMG.frames=[];
+  const blobs=[];
+  for(let k=0;k<fr.length;k++){
+    if(signal&&signal.aborted) throw {code:"cancelled"};
+    const f=fr[k], wc=await sink.getCanvas((f+0.25)/S.fps); if(!wc) continue;
+    const src=wc.canvas, c=document.createElement("canvas"); c.width=src.width; c.height=src.height;
+    const g=c.getContext("2d"); g.drawImage(src,0,0);
+    const no=SIMG.frames.length+1, label=`Bild ${no} · ${srcTc(f)}`;
+    g.font="600 20px sans-serif"; const w=g.measureText(label).width+16;
+    g.fillStyle="rgba(0,0,0,.72)"; g.fillRect(0,0,w,32); g.fillStyle="#fff"; g.fillText(label,8,23);
+    const blob=await toBlob(c,"image/jpeg",0.82); blobs.push(blob);
+    SIMG.frames.push({no,f,tc:srcTc(f),url:URL.createObjectURL(blob)});
+    onProg&&onProg(k+1,fr.length);
+  }
+  return blobs;
+}
+async function frameCanvas(f,h){ const sink=await stillSink(h); const wc=await sink.getCanvas((f+0.25)/S.fps); if(!wc) throw new Error("Bildrutan kunde inte läsas."); return wc.canvas; }
+/* Rutnät 2×2 med runda bokstavsmärken (A–D). Svarsbilden tonar ner de felaktiga rutorna. */
+async function makeGrid(frames,correct){
+  const TW=640,TH=360,G=10, cv=document.createElement("canvas"); cv.width=TW*2+G*3; cv.height=TH*2+G*3;
+  const g=cv.getContext("2d"); g.fillStyle="#ffffff"; g.fillRect(0,0,cv.width,cv.height);
+  for(let i=0;i<4;i++){
+    const src=await frameCanvas(frames[i],TH), x=G+(i%2)*(TW+G), y=G+Math.floor(i/2)*(TH+G);
+    const s2=Math.max(TW/src.width,TH/src.height), dw=src.width*s2, dh=src.height*s2;
+    g.save(); g.beginPath(); g.rect(x,y,TW,TH); g.clip();
+    if(correct!=null&&i!==correct) g.filter="grayscale(.7) brightness(.4)";
+    g.drawImage(src,x+(TW-dw)/2,y+(TH-dh)/2,dw,dh); g.restore(); g.filter="none";
+    if(correct!=null&&i===correct){ g.strokeStyle="#1f8a50"; g.lineWidth=8; g.strokeRect(x+4,y+4,TW-8,TH-8); }
+    const r=30,cx=x+16+r,cy=y+16+r; g.fillStyle="#0D6F7E"; g.beginPath(); g.arc(cx,cy,r,0,Math.PI*2); g.fill();
+    g.fillStyle="#fff"; g.font="700 40px sans-serif"; g.textAlign="center"; g.textBaseline="middle"; g.fillText("ABCD"[i],cx,cy+2); g.textAlign="start"; g.textBaseline="alphabetic";
+  }
+  return toBlob(cv,"image/png");
+}
+async function thumbData(f){ const c=await frameCanvas(f,144); return c.toDataURL("image/jpeg",0.7); }
 function sugKey(){ const k=key(); return k?k+":forslag":null; }
 function sugSave(){ try{ const k=sugKey(); if(k) localStorage.setItem(k,JSON.stringify({list:SUG.list})); }catch(_){} }
 /* Förslag som gjorts innan ett avsnitt öppnats (eller medan ett annat var öppet och listan
@@ -4354,7 +4416,8 @@ function sugPrompt(){
   if(text.length>SUG_MAX){ text=text.slice(0,SUG_MAX); cut=true; }
   const n=Math.max(1,Math.min(20,Math.round(+$("sugN").value)||5)), typ=$("sugType").value, wish=$("sugWish").value.trim();
   const finns=S.qs.map(q=>q.fraga).filter(Boolean);
-  const p=`Du hjälper en redaktör på SVT att göra quizfrågor med videoklipp till "Quiz i Play". Underlaget nedan är repliker eller undertext ur ett tv-avsnitt. Du ser bara texten, inte bild eller ljud.
+  const imgs=SIMG.frames.length>0;
+  const p=`Du hjälper en redaktör på SVT att göra quizfrågor med videoklipp till "Quiz i Play". ${imgs?`Du får ${SIMG.frames.length} bildrutor ur avsnittet${text?" och repliker eller undertext":""}. Du hör inte ljudet.`:"Underlaget nedan är repliker eller undertext ur ett tv-avsnitt. Du ser bara texten, inte bild eller ljud."}
 
 UPPGIFT
 Föreslå ${n} flervalsfrågor${typ?` av typen "${typ}"`:""}. Varje fråga har ett frågeklipp ur avsnittet och, när det passar, ett svarsklipp som visas efter att spelaren svarat.
@@ -4364,34 +4427,46 @@ FRÅGETYPER SOM FUNGERAR
 - Vad händer härnäst?: klippet stannar före en reaktion eller ett beslut. Svarsklippet visar fortsättningen.
 - Vem sa det?: repliken hörs medan den som talar inte syns. Alternativen är fyra personer i avsnittet. Används bara om underlaget visar vem som talar.
 - Vad fick hen höra?: klipp på en reaktion utan sammanhang.
-
+${imgs?`- Vem kommer in i rummet?: klippet stannar precis innan någon kommer in eller dyker upp i bild. Svarsklippet visar vem det var.
+- Vilket ansiktsuttryck?: klippet stannar före en reaktion. Alternativen beskriver fyra uttryck (t.ex. "skrattar", "ser chockad ut"). Svarsklippet visar reaktionen.
+- Vilken bild är rätt?: fyra bildrutor som alternativ, t.ex. "Vilken var brudens klänning?" eller "Vilken av de här platserna åkte paret till?". Använd då fältet "bildalternativ" med fyra bildnummer i ordningen A–D. Felaktiga alternativ ska vara rimliga och likna det rätta (samma slags motiv), men får inte också vara rätt.
+- Detaljen: en detalj som syns i bild (en sak på bordet, en tatuering, en skylt). Frågan kan vara ett kort klipp eller fyra bildalternativ.
+`:""}
 REDAKTIONELLA REGLER (viktiga)
 - Hitta aldrig på fakta om verkliga personer. Allt rätt svar ska stå i underlaget.
 - Felaktiga alternativ ska vara lika långa och lika konkreta som det rätta, så att svaret inte går att gissa på formen. Kontrollera att inget påhittat alternativ råkar vara sant enligt underlaget.
 - Bygger frågan på ett tveksamt påstående i programmet, formulera den som "enligt X" och reda ut det i förklaringen.
 - Skriv på svenska.
-
+${imgs?`- Avgör aldrig vem en person är utifrån utseendet. Ett namn får bara komma från underlaget (t.ex. talarangivelser) eller från text i bild, som namnskyltar. Annars beskriver du personen ("kvinnan i grön klänning") och skriver i "osakerhet" att redaktören ska fylla i namnet.
+- Bygg bara frågor på sådant som tydligt syns i bildrutorna. Gissa inte vad som händer mellan rutorna; skriv i "osakerhet" vad redaktören ska kontrollera i videon.
+`:""}
 TIDKODER
 - Avsnittsfilen går i ${fps} bildrutor per sekund. Filens första bildruta har källtidkoden ${start}.
 - Ange alla tider som källtidkod HH:MM:SS:FF (FF = bildruta 00–${String(Math.round(fps)-1).padStart(2,"0")}).
 - Om underlagets tider räknas från filens början (t.ex. 00:05:03,880 eller 05:03:22), lägg till starttidkoden. Om de redan är källtidkoder, använd dem som de är.
 - Undertexttider är ungefärliga. Låt frågeklippet börja ungefär en halv sekund före första repliken och vara 3–10 sekunder långt. För "Fullfölj repliken": låt klippet sluta mitt i repliken, före de ord som ska gissas, och uppskatta tidpunkten utifrån var i undertextraden orden står. Skriv i "osakerhet" vad redaktören behöver lyssna efter.
-- Frysruta i slutet av frågeklippet: 2 sekunder för "Fullfölj repliken" och "Vad händer härnäst?", annars 0.
+- Frysruta i slutet av frågeklippet: 2 sekunder för "Fullfölj repliken", "Vad händer härnäst?", "Vem kommer in i rummet?" och "Vilket ansiktsuttryck?", annars 0.
+${imgs?`- Bildrutorna är märkta "Bild N · tidkod". Använd de tidkoderna som hållpunkter för klippen.
+
+BILDRUTOR
+${SIMG.frames.map(x=>`Bild ${x.no} = ${x.tc}`).join("\n")}
+`:""}
 ${finns.length?`\nFRÅGOR SOM REDAN FINNS (upprepa dem inte)\n${finns.map(f=>"- "+f).join("\n")}\n`:""}${wish?`\nREDAKTÖRENS ÖNSKEMÅL\n${wish}\n`:""}
 SVARSFORMAT
 Svara med enbart ett JSON-objekt i den här formen:
 {"fragor":[{"typ":"Fullfölj repliken","fraga":"Hur avslutar Anna meningen?","alternativ":["…","…","…","…"],"ratt":"B","forklaring":"kort text som visas efter svaret","klipp":{"in":"01:17:15:00","ut":"01:17:19:17","frys":2},"svar":{"in":"01:17:15:00","ut":"01:17:24:10"},"underlag":"den replik eller rad frågan bygger på, ordagrant","osakerhet":"vad som behöver kontrolleras"}]}
-"svar" får vara null om inget svarsklipp behövs. "ratt" är A, B, C eller D.
+"svar" får vara null om inget svarsklipp behövs. "ratt" är A, B, C eller D.${imgs?`
+För en fråga med bildalternativ: lägg till "bildalternativ":[nr,nr,nr,nr] (bildnummer i ordningen A–D), sätt "alternativ" till korta beskrivningar av de fyra bilderna, och sätt "klipp" och "svar" till null.`:""}
 
 UNDERLAG${src.label?` (${src.label})`:""}${cut?" (förkortat, för långt för att skicka helt)":""}
-${text}`;
+${text||"(ingen text, bara bildrutorna)"}`;
   return {p,cut};
 }
-function sugNextNames(withAnswer){
+function sugNextNames(withAnswer,kind="klipp",ext="mp4"){
   const pre=$("prefix").value.trim(), ep=S.ep!=null?pad(S.ep):"", head=(pre||ep)?`${pre}${ep}_`:"";
-  const used=new Set(S.clips.map(c=>c.name)); SUG.list.forEach(x=>{ used.add(x.media); if(x.svar_media) used.add(x.svar_media); });
-  let n=1; while(used.has(`${head}klipp${pad(n)}.mp4`)||used.has(`${head}klipp${pad(n)}_svar.mp4`)) n++;
-  return {media:`${head}klipp${pad(n)}.mp4`, svar_media:withAnswer?`${head}klipp${pad(n)}_svar.mp4`:""};
+  const used=new Set(S.clips.map(c=>c.name)); S.qs.forEach(q=>{ used.add(q.media); used.add(q.svar_media); }); SUG.list.forEach(x=>{ used.add(x.media); if(x.svar_media) used.add(x.svar_media); });
+  let n=1; while(used.has(`${head}${kind}${pad(n)}.${ext}`)||used.has(`${head}${kind}${pad(n)}_svar.${ext}`)) n++;
+  return {media:`${head}${kind}${pad(n)}.${ext}`, svar_media:withAnswer?`${head}${kind}${pad(n)}_svar.${ext}`:""};
 }
 function sugTcOk(tc){ return typeof tc==="string" && tcToFrames(tc)!=null; }
 function sugAccept(data){
@@ -4402,6 +4477,14 @@ function sugAccept(data){
     if(!r||!r.fraga) continue;
     const alt=Array.isArray(r.alternativ)?r.alternativ.slice(0,4).map(String):[]; while(alt.length<4) alt.push("");
     let ratt=String(r.ratt??"A").trim().toUpperCase(); if(/^[0-3]$/.test(ratt)) ratt="ABCD"[+ratt]; if(!"ABCD".includes(ratt)||ratt.length!==1) ratt="A";
+    const ba=Array.isArray(r.bildalternativ)?r.bildalternativ.map(v=>SIMG.frames.find(x=>x.no===+v)).filter(Boolean):[];
+    if(ba.length===4){
+      const names=sugNextNames(true,"bild","png");
+      SUG.list.push({typ:String(r.typ||"Vilken bild är rätt?"),fraga:String(r.fraga),alternativ:alt.map((a,j)=>a||("Bild "+"ABCD"[j])),ratt,forklaring:String(r.forklaring||""),
+        klipp:{in:"",ut:"",frys:0},svar:null,imgAlts:ba.map(x=>x.f),thumbs:[],underlag:String(r.underlag||""),osakerhet:String(r.osakerhet||""),
+        media:names.media,svar_media:names.svar_media,added:false});
+      added++; continue;
+    }
     const k=r.klipp||{}, sv=r.svar&&sugTcOk(r.svar.in)&&sugTcOk(r.svar.ut)?{in:r.svar.in,ut:r.svar.ut}:null;
     const names=sugNextNames(!!sv);
     SUG.list.push({typ:String(r.typ||""),fraga:String(r.fraga),alternativ:alt,ratt,forklaring:String(r.forklaring||""),
@@ -4425,7 +4508,15 @@ function sugLoadClip(x,which,msg){
     const top=document.querySelector(".main"); if(top) top.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});
   }catch(e){ console.error(e); say("Klippet kunde inte laddas: "+((e&&e.message)||e),"err"); }
 }
-function sugAdd(x){
+async function sugAdd(x,msg){
+  if(x.imgAlts){
+    if(!S.dur){ if(msg){ msg.textContent="Öppna avsnittet först, så kan bilderna skapas."; msg.className="warn"; msg.hidden=false; } return; }
+    try{ if(msg){ msg.textContent="Skapar fråge- och svarsbild…"; msg.className="note"; msg.hidden=false; }
+      const ri="ABCD".indexOf(x.ratt), qb=await makeGrid(x.imgAlts,null), ab=await makeGrid(x.imgAlts,ri);
+      S.blobs.set(x.media,qb); blobPut(x.media,qb); S.blobs.set(x.svar_media,ab); blobPut(x.svar_media,ab);
+      if(msg){ msg.textContent=`Skapade ${x.media} och ${x.svar_media}.`; }
+    }catch(e){ console.error(e); if(msg){ msg.textContent="Bilderna kunde inte skapas: "+((e&&e.message)||e); msg.className="err"; } return; }
+  }
   const q=newQ(); q.fraga=x.fraga; q.alternativ=x.alternativ.slice(); q.ratt=x.ratt; q.forklaring=x.forklaring; q.media=x.media; q.svar_media=x.svar_media;
   S.qs.push(q); x.added=true; saveStore(); sugSave(); renderQs(); sugRender();
 }
@@ -4436,11 +4527,20 @@ function sugRender(){
     const el=(tag,cls,txt)=>{ const e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; };
     if(x.typ) d.appendChild(el("div","typ",x.typ));
     d.appendChild(el("p","fr",x.fraga));
+    if(x.imgAlts){
+      const g=el("div","imgs");
+      x.imgAlts.forEach((f,j)=>{ const fig=el("figure","ABCD"[j]===x.ratt?"ok":""), im=document.createElement("img"); im.alt=x.alternativ[j]||"";
+        const fr=SIMG.frames.find(y=>y.f===f); if(x.thumbs[j]) im.src=x.thumbs[j]; else if(fr) im.src=fr.url;
+        if(!x.thumbs[j]&&S.dur) thumbData(f).then(u=>{ x.thumbs[j]=u; im.src=u; sugSave(); }).catch(()=>{});
+        fig.appendChild(im); fig.appendChild(el("figcaption","","ABCD"[j])); g.appendChild(fig); });
+      d.appendChild(g);
+    }
     const ol=el("ol"); ol.type="A"; x.alternativ.forEach((a,j)=>{ const li=el("li","ABCD"[j]===x.ratt?"ok":"",a+("ABCD"[j]===x.ratt?"  (rätt)":"")); ol.appendChild(li); }); d.appendChild(ol);
+    if(x.osakerhet&&/namn/i.test(x.osakerhet)) d.appendChild(el("p","warn","Fyll i namn: "+x.osakerhet));
     const a=el("div","acts"), msg=el("p","note"); msg.hidden=true; msg.setAttribute("role","status");
-    const b1=el("button","","Ladda frågeklippet"); b1.onclick=()=>sugLoadClip(x,"klipp",msg); a.appendChild(b1);
+    if(!x.imgAlts){ const b1=el("button","","Ladda frågeklippet"); b1.onclick=()=>sugLoadClip(x,"klipp",msg); a.appendChild(b1); }
     if(x.svar){ const b2=el("button","","Ladda svarsklippet"); b2.onclick=()=>sugLoadClip(x,"svar",msg); a.appendChild(b2); }
-    const b3=el("button",x.added?"":"primary",x.added?"Tillagd":"Lägg till som fråga"); b3.disabled=x.added; b3.onclick=()=>sugAdd(x); a.appendChild(b3);
+    const b3=el("button",x.added?"":"primary",x.added?"Tillagd":"Lägg till som fråga"); b3.disabled=x.added; b3.onclick=()=>sugAdd(x,msg); a.appendChild(b3);
     const b4=el("button","","Ta bort"); b4.onclick=()=>{ SUG.list.splice(i,1); sugSave(); sugRender(); }; a.appendChild(b4);
     d.appendChild(a); d.appendChild(msg); box.appendChild(d);
   });
@@ -4451,16 +4551,25 @@ const SUG_ERR={not_granted:"Sidan fick inte använda Claude. Du kan ändra det u
   empty_completion:"Claude svarade inte. Försök igen med kortare underlag.",session_expired:"Du behöver logga in på claude.ai igen.",upstream_error:"Anslutningen bröts. Försök igen."};
 async function sugGo(){
   const sample=await SAMPLEP; if(!sample) return;
-  if(!sugSource().text) return sugSetStatus("Läs in en undertextfil eller klistra in repliker först.","warn");
-  const {p,cut}=sugPrompt();
+  const useImg=!$("sugImgBox").hidden&&$("sugImg").checked;
+  if(!sugSource().text&&!useImg) return sugSetStatus("Läs in en undertextfil eller klistra in repliker först.","warn");
+  if(useImg&&!S.dur) return sugSetStatus("Öppna avsnittet först, så kan bildrutor tas ut.","warn");
   SUG.ctl=new AbortController(); $("sugGo").disabled=true; $("sugStop").hidden=false;
-  sugSetStatus("Claude tänker… Det brukar ta mellan en halv och två minuter.");
   try{
-    const data=await sample.json(p,{signal:SUG.ctl.signal,cache:false,onText:({text})=>sugSetStatus(`Claude skriver förslag… ${text.length} tecken`)});
+    let images;
+    if(useImg){ sugSetStatus("Tar ut bildrutor…");
+      images=await grabFrames(SIMG.lim.maxCount,SUG.ctl.signal,(k,n)=>sugSetStatus(`Tar ut bildrutor… ${k}/${n}`)); }
+    else { SIMG.frames.forEach(x=>URL.revokeObjectURL(x.url)); SIMG.frames=[]; }
+    const {p,cut}=sugPrompt();
+    sugSetStatus(useImg?`Claude tittar på ${images.length} bildrutor… Det kan ta ett par minuter.`:"Claude tänker… Det brukar ta mellan en halv och två minuter.");
+    const opts={signal:SUG.ctl.signal,cache:false,onText:({text})=>sugSetStatus(`Claude skriver förslag… ${text.length} tecken`)}; if(images&&images.length) opts.images=images;
+    const data=await sample.json(p,opts);
     const n=sugAccept(data); sugSave(); sugRender(); suggestName();
-    sugSetStatus(n?`${n} förslag klara${cut?" (underlaget förkortades)":""}.`:"Inga användbara förslag kom tillbaka. Prova med mer underlag.",n?"note":"warn");
+    sugSetStatus(n?`${n} förslag klara${cut?" (underlaget förkortades)":""}.${useImg?" Namn kommer bara från undertext eller text i bild; Claude känner inte igen ansikten.":""}`:"Inga användbara förslag kom tillbaka. Prova med mer underlag.",n?"note":"warn");
   }catch(e){
     if(e&&e.code==="cancelled") sugSetStatus("Avbrutet.");
+    else if(e&&(e.code==="images_unavailable"||e.code==="image_rejected")) sugSetStatus("Bildrutorna kunde inte skickas. Prova utan bildrutor.","warn");
+    else if(e instanceof Error) sugSetStatus(e.message,"warn");
     else if(e&&(e.code==="not_granted"||e.code==="sampling_disabled")){ sugSetStatus(SUG_ERR[e.code],"warn"); }
     else sugSetStatus(SUG_ERR[e&&e.code]||("Något gick fel: "+((e&&(e.message||e.code))||e)),"warn");
   }finally{ $("sugGo").disabled=false; $("sugStop").hidden=true; SUG.ctl=null; }
@@ -4470,7 +4579,14 @@ $("sugFile").onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
   try{ const t=await f.text(); subsSet(f.name,t); subsStore(); }
   catch(_){ $("sugFileNote").textContent="Filen gick inte att läsa."; }
   e.target.value=""; };
-SAMPLEP.then(s=>{ if(s){ $("sugPanel").hidden=false; sugLoad(); subsRestore(); } });
+SAMPLEP.then(async s=>{ if(!s) return; $("sugPanel").hidden=false; sugLoad(); subsRestore();
+  const lim=await (s.limits?s.limits().catch(()=>null):null);
+  if(lim&&lim.images){ SIMG.lim={maxCount:Math.max(1,Math.min(20,lim.images.maxCount||8))}; $("sugImgBox").hidden=false; }
+});
+function sugImgUi(){ const on=$("sugImg").checked; $("sugRangeField").hidden=!on; $("sugImgNote").hidden=!on;
+  if(on&&SIMG.lim){ $("sugImgNote").textContent=`${SIMG.lim.maxCount} bildrutor skickas, jämnt fördelade. För fler detaljer: markera en scen med IN och UT och välj "Bara mellan IN och UT". Claude känner inte igen vem någon är; namn måste stå i undertexten eller i bild.`; } }
+$("sugImg").onchange=sugImgUi;
+$("sugType").addEventListener("change",()=>{ const o=$("sugType").selectedOptions[0]; if(o&&o.parentElement.tagName==="OPTGROUP"&&!$("sugImgBox").hidden&&!$("sugImg").checked){ $("sugImg").checked=true; sugImgUi(); } });
 if(!window.VideoEncoder||!M){ setStatus("Den här webbläsaren saknar stöd för videokodning. Öppna filen i Chrome på datorn.","err"); }
 </script>
 </body>
