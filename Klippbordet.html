@@ -4283,7 +4283,7 @@ document.addEventListener("keydown",e=>{
 });
 /* ---------- förslag från Claude ----------
    Fungerar bara när sidan öppnas i claude.ai (förmågan "sample"). Annars är panelen dold. */
-const SUG={list:[],ctl:null};
+const SUG={list:[],ctl:null,owner:null};
 const SAMPLEP=(window.claude&&window.claude.use)?window.claude.use("sample").catch(()=>null):Promise.resolve(null);
 const SUG_MAX=180000;
 /* ---- Undertextfil med ett eller flera avsnitt ----
@@ -4407,11 +4407,15 @@ function sugKey(){ const k=key(); return k?k+":forslag":null; }
 function sugSave(){ try{ const k=sugKey(); if(k) localStorage.setItem(k,JSON.stringify({list:SUG.list})); }catch(_){} }
 /* Förslag som gjorts innan ett avsnitt öppnats (eller medan ett annat var öppet och listan
    för den här filen är tom) följer med till filen som öppnas, i stället för att försvinna. */
+/* Förslag hör till en videofil. Bara förslag som gjorts innan någon fil öppnats följer med
+   till den första filen; byter man fil visas den filens egna förslag (eller inga). */
 function sugLoad(){
-  const carry=SUG.list.filter(x=>!x.added);
+  const carry=SUG.owner==null?SUG.list.filter(x=>!x.added):[];
   let d=null; try{ const k=sugKey(); d=k&&JSON.parse(localStorage.getItem(k)||"null"); }catch(_){}
   if(d&&d.list&&d.list.length) SUG.list=d.list;
   else { SUG.list=carry; if(carry.length) sugSave(); }
+  SUG.owner=sugKey();
+  sugSetStatus(SUG.list.length?`${SUG.list.length} förslag för den här filen.`:"Claude läser bara texten. Tidkoderna är ungefärliga, så lyssna och justera IN och UT innan du exporterar.");
   sugRender();
 }
 function sugSetStatus(t,cls){ $("sugStatus").textContent=t; $("sugStatus").className=cls||"note"; }
