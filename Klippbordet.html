@@ -270,7 +270,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
         <h2 id="h-fragor">Färdiga frågor</h2>
         <p class="note" id="qSummary">Inga frågor ännu.</p>
         <div id="qs" style="display:grid;gap:8px"></div>
-        <button id="bAddQ">+ Ny fråga</button>
+        <div class="row"><button id="bAddQ">+ Ny fråga</button><button id="bShuffle" title="Placera rätt svar slumpvis bland A–D">Blanda svarsordning</button></div>
         <div class="sep"></div>
         <button id="bZip" class="primary" disabled>Ladda ner frågepaket (.zip)</button>
         <p class="note" id="zipNote">En mapp med importtexten och alla klipp, klar att ladda upp i Quiz i Play.</p>
@@ -4251,7 +4251,7 @@ $("bBackS").onclick=()=>step(-fpsInt()); $("bFwdS").onclick=()=>step(fpsInt());
 $("bSetIn").onclick=setIn; $("bSetOut").onclick=setOut; $("bPlayClip").onclick=playClip;
 $("bStill").onclick=saveStill; $("bExport").onclick=exportClip; $("bDownload").onclick=()=>REC.clip&&download(REC.clip.name);
 $("bAddQ").onclick=()=>{ const q=newQ(); const n=S.clips.length; if(n) q.media=S.clips[n-1].name; S.qs.push(q); saveStore(); renderQs(); };
-$("bCopy").onclick=copyJson; $("bZip").onclick=downloadZip;
+$("bCopy").onclick=copyJson; $("bZip").onclick=downloadZip; $("bShuffle").onclick=shuffleQs;
 const doGoto=()=>{ const f=parseInput($("goto").value); if(f==null) return setStatus("Tidkoden gick inte att tolka.","err"); if(!vid.paused) vid.pause(); seekFrame(f); };
 $("bGoto").onclick=doGoto; $("goto").onkeydown=e=>{ if(e.key==="Enter") doGoto(); };
 /* Tolkar en IN/UT-tidkod och godtar bara rutor som finns i filen. */
@@ -4292,6 +4292,11 @@ const SUG_MAX=180000;
 const SUBS={name:"",text:"",parts:[]};
 const EP_HEAD=/^[^\wåäö]{0,3}(?:avsnitt|avs|program|pgm|episod|episode|ep|del)[\s:#>\-_.]*(\d{1,3})\b|-(\d{3})[A-Z]?-/i;
 function subsSplit(text){
+  if(/<(html|body|div|p|span|section)\b/i.test(text)){
+    text=text.replace(/<(style|script|head)\b[\s\S]*?<\/\1>/gi,"\n").replace(/<br\s*\/?>/gi," ").replace(/<[^>]+>/g,"\n")
+      .replace(/&nbsp;/g," ").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+    text=text.split(/\n/).map(l=>l.trim()).filter(Boolean).join("\n");
+  }
   const lines=text.split(/\r?\n/);
   // 1. Rubriker: korta rader med avsnittsnummer
   const heads=[];
@@ -4307,7 +4312,7 @@ function subsSplit(text){
   const tcRe=/(\d{1,2}):(\d{2}):(\d{2})(?:[:;.,](\d{1,3}))?/;
   const parts=[]; let start=0, last=-1;
   lines.forEach((l,i)=>{ const m=l.match(tcRe); if(!m) return; const sec=(+m[1])*3600+(+m[2])*60+(+m[3]);
-    if(last>=0&&sec<last-600){ parts.push(lines.slice(start,i).join("\n").trim()); start=i; } last=sec; });
+    if(last>=0&&(sec<last-600||sec>last+3600)){ parts.push(lines.slice(start,i).join("\n").trim()); start=i; } last=sec; });
   parts.push(lines.slice(start).join("\n").trim());
   return parts.filter(t=>t).map((t,k)=>({n:k+1,text:t}));
 }
@@ -4469,6 +4474,20 @@ function sugNextNames(withAnswer,kind="klipp",ext="mp4"){
   return {media:`${head}${kind}${pad(n)}.${ext}`, svar_media:withAnswer?`${head}${kind}${pad(n)}_svar.${ext}`:""};
 }
 function sugTcOk(tc){ return typeof tc==="string" && tcToFrames(tc)!=null; }
+function shuffledIdx(n){ const a=[...Array(n).keys()]; for(let i=n-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+/* Blandar alternativen i färdiga frågor. Frågor med bildrutnät hoppas över, eftersom bokstäverna sitter i bilden. */
+function shuffleQs(){
+  let n=0,skip=0;
+  S.qs.forEach(q=>{
+    if(/\.(png|jpe?g|webp)$/i.test(q.media||"")){ skip++; return; }
+    const ri="ABCD".indexOf(q.ratt||"A"), perm=shuffledIdx(4), a=q.alternativ.slice(0,4);
+    while(a.length<4) a.push("");
+    q.alternativ=perm.map(i=>a[i]); q.ratt="ABCD"[perm.indexOf(ri<0?0:ri)]; n++;
+  });
+  saveStore(); renderQs();
+  $("copyMsg").textContent=`Blandade ${n} ${n===1?"fråga":"frågor"}${skip?`, hoppade över ${skip} bildfråga${skip===1?"":"r"}`:""}.`;
+  setTimeout(()=>$("copyMsg").textContent="",4000);
+}
 function sugAccept(data){
   const arr=Array.isArray(data)?data:(data&&Array.isArray(data.fragor)?data.fragor:null);
   if(!arr) throw new Error("Svaret hade inte rätt form.");
@@ -4477,7 +4496,11 @@ function sugAccept(data){
     if(!r||!r.fraga) continue;
     const alt=Array.isArray(r.alternativ)?r.alternativ.slice(0,4).map(String):[]; while(alt.length<4) alt.push("");
     let ratt=String(r.ratt??"A").trim().toUpperCase(); if(/^[0-3]$/.test(ratt)) ratt="ABCD"[+ratt]; if(!"ABCD".includes(ratt)||ratt.length!==1) ratt="A";
-    const ba=Array.isArray(r.bildalternativ)?r.bildalternativ.map(v=>SIMG.frames.find(x=>x.no===+v)).filter(Boolean):[];
+    let ba=Array.isArray(r.bildalternativ)?r.bildalternativ.map(v=>SIMG.frames.find(x=>x.no===+v)).filter(Boolean):[];
+    // Slumpa ordningen så att rätt svar inte alltid hamnar på samma bokstav
+    { const perm=shuffledIdx(4), ri="ABCD".indexOf(ratt);
+      const a2=perm.map(i=>alt[i]); alt.splice(0,4,...a2); ratt="ABCD"[perm.indexOf(ri)];
+      if(ba.length===4) ba=perm.map(i=>ba[i]); }
     if(ba.length===4){
       const names=sugNextNames(true,"bild","png");
       SUG.list.push({typ:String(r.typ||"Vilken bild är rätt?"),fraga:String(r.fraga),alternativ:alt.map((a,j)=>a||("Bild "+"ABCD"[j])),ratt,forklaring:String(r.forklaring||""),
