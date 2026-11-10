@@ -95,12 +95,14 @@ pre.json{margin:0;font:11.5px/1.45 var(--f-tc);background:var(--raise);border:1p
 .sep{height:1px;background:var(--line)}
 details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 .keys{font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px}
-.monitors{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.monitors{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
 @media (max-width:700px){.monitors{grid-template-columns:minmax(0,1fr)}}
 .mon{display:grid;gap:6px;min-width:0;align-content:start}
 .monhead{display:flex;align-items:baseline;justify-content:space-between;gap:4px 10px;flex-wrap:wrap}
 .monlabel{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
-.mon .tc{font-size:22px}
+.mon .tc{font-size:26px}
+/* En skärm: begränsa höjden så att tidslinjen syns utan att skrolla. */
+.mon .screen{width:min(100%,calc(58vh*16/9));margin-inline:auto}
 .screen .empty{position:absolute;inset:0;display:grid;place-items:center;color:#c3cdcf;font-size:13px;text-align:center;padding:16px}
 .tlbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
 .tlbar h2{margin-right:auto}
@@ -169,20 +171,6 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
             <div class="drop" id="drop"><div><strong>Dra in en avsnittsfil hit</strong><p>eller välj ”Öppna avsnitt”. Filen stannar på datorn och laddas inte upp någonstans.</p></div></div>
           </div>
           <div class="tcrow"><span class="tcsub" id="tcrel">från filstart --:--:--</span><span class="tcsub" id="tcframe">bildruta –</span></div>
-        </section>
-        <section class="mon" aria-label="Klipp">
-          <div class="monhead"><span class="monlabel">Klipp</span><span class="tc" id="rtc">--:--:--:--</span></div>
-          <div class="screen">
-            <video id="resVid" playsinline preload="auto"></video>
-            <div class="empty" id="recEmpty">Exportera ett klipp eller välj ett i bin.</div>
-          </div>
-          <div class="tcrow"><span class="tcsub" id="recPos">–</span><span class="tcsub" id="recName"></span></div>
-          <div class="transport">
-            <button id="rStart" disabled>Till början</button>
-            <button id="rPlay" class="primary" disabled style="min-width:92px">Spela</button>
-            <button id="bDownload" hidden>Ladda ner</button>
-          </div>
-          <p class="note" id="recInfo"></p>
         </section>
       </div>
 
@@ -3837,52 +3825,13 @@ tlEl.addEventListener("wheel",e=>{
 $("zIn").onclick=()=>tlZoom(0.5); $("zOut").onclick=()=>tlZoom(2);
 $("zFit").onclick=()=>tlSetView(0,S.dur); $("zClip").onclick=tlFitClip;
 
-/* ---------- klippmonitor ----------
-   Visar den exporterade filen om den finns i minnet, annars spelas IN→UT direkt ur källan. */
-const rv=$("resVid"), REC={mode:null,clip:null};
+/* ---------- vald klipp i bin ----------
+   En skärm: att välja ett klipp lägger dess IN och UT i källan. */
+const REC={clip:null};
 const recLen=c=>c.outF-c.inF+1;
-function recFrame(){ const f=Math.floor(rv.currentTime*S.fps+1e-3); return REC.mode==="src"?f-REC.clip.inF:f; }
-function recSeek(k){ rv.currentTime=((REC.mode==="src"?REC.clip.inF:0)+k+0.25)/S.fps; }
-function recShow(clip){
-  rv.pause(); REC.clip=clip; const blob=S.blobs.get(clip.name);
-  if(blob){ REC.mode="blob"; rv.src=setUrl("res",blob); }
-  else { REC.mode="src"; if(S.urls.res){ URL.revokeObjectURL(S.urls.res); S.urls.res=null; } rv.src=S.urls.vid; }
-  rv.onloadedmetadata=()=>recSeek(0);
-  $("recEmpty").hidden=true; $("rPlay").disabled=$("rStart").disabled=false; $("bDownload").hidden=!blob;
-  $("recName").textContent=clip.name;
-  const len=(recLen(clip)/S.fps).toFixed(2)+" s"+(clip.freeze?` + frys ${clip.freeze} s`:"");
-  $("recInfo").textContent=blob?`Exporterad fil · ${(blob.size/1e6).toFixed(2)} MB · ${len}`:`Förhandsvisning ur källan · ${len}${clip.freeze?" (frysrutan visas inte)":""}. Exportera igen för att få filen.`;
-  recUi(); renderClips();
-}
-function clearRec(){
-  rv.pause(); rv.removeAttribute("src"); rv.load(); REC.mode=REC.clip=null;
-  if(S.urls.res){ URL.revokeObjectURL(S.urls.res); S.urls.res=null; }
-  $("recEmpty").hidden=false; $("rPlay").disabled=$("rStart").disabled=true; $("bDownload").hidden=true;
-  $("rtc").textContent="--:--:--:--"; $("recPos").textContent="–"; $("recName").textContent=""; $("recInfo").textContent="";
-}
-function recUi(){
-  const c=REC.clip; if(!c) return;
-  const n=recLen(c), k=Math.max(0,recFrame()), total=n+(REC.mode==="blob"?Math.round((c.freeze||0)*S.fps):0);
-  $("rtc").textContent=k<n?srcTc(c.inF+k):srcTc(c.outF)+" frys";
-  $("recPos").textContent=`${framesToRel(Math.min(k,total-1))} / ${framesToRel(total)}`;
-}
-function recPlay(){
-  if(!REC.clip) return;
-  if(!rv.paused) return rv.pause();
-  const n=recLen(REC.clip);
-  if(REC.mode==="src"&&recFrame()>=n-1){ recSeek(0); rv.addEventListener("seeked",()=>rv.play(),{once:true}); }
-  else { if(rv.ended) rv.currentTime=0; rv.play(); }
-}
-function recTick(){
-  if(rv.paused||!REC.clip) return;
-  if(REC.mode==="src"&&recFrame()>=recLen(REC.clip)){ rv.pause(); recSeek(recLen(REC.clip)-1); }
-  recUi(); requestAnimationFrame(recTick);
-}
-rv.addEventListener("play",()=>{ $("rPlay").textContent="Paus"; recTick(); });
-rv.addEventListener("pause",()=>{ $("rPlay").textContent="Spela"; recUi(); });
-rv.addEventListener("seeked",recUi);
-rv.addEventListener("click",recPlay);
-$("rPlay").onclick=recPlay; $("rStart").onclick=()=>{ rv.pause(); recSeek(0); };
+function recShow(clip){ REC.clip=clip; renderClips(); }
+function clearRec(){ REC.clip=null; }
+function loadClip(c){ REC.clip=c; S.inF=c.inF; S.outF=c.outF; $("freeze").value=c.freeze||0; $("outName").value=c.name; checkName(); seekFrame(c.inF); saveStore(); renderClips(); }
 
 /* ---------- gränssnitt ---------- */
 function updateUi(){
@@ -4149,16 +4098,15 @@ function renderClips(){
   $("clipsEmpty").hidden=S.clips.length>0;
   S.clips.forEach((c,i)=>{
     const d=document.createElement("div"); d.className="card"+(REC.clip&&REC.clip.name===c.name?" sel":""); d.tabIndex=0;
-    d.title="Visa i klippmonitorn";
+    d.title="Lägg IN och UT i källan";
     d.innerHTML=`<img class="th" alt=""><div class="meta"><b></b><span data-k="tc"></span><span data-k="len"></span></div>
-      <div class="acts"><button data-a="load" title="Lägg IN och UT i källan">Till källan</button>${S.blobs.has(c.name)?'<button data-a="dl">Ladda ner</button>':""}<button data-a="del" aria-label="Ta bort ur bin">✕</button></div>`;
+      <div class="acts">${S.blobs.has(c.name)?'<button data-a="dl">Ladda ner</button>':""}<button data-a="del" aria-label="Ta bort ur bin">✕</button></div>`;
     const img=d.querySelector("img"); if(c.thumb) img.src=c.thumb; else { img.removeAttribute("src"); ensureClipThumb(c); }
     d.querySelector("b").textContent=c.name; d.querySelector("b").title=c.name;
     d.querySelector('[data-k="tc"]').textContent=`${c.inTc} → ${c.outTc}`;
     d.querySelector('[data-k="len"]').textContent=`${(recLen(c)/S.fps).toFixed(2)} s${c.freeze?` + frys ${c.freeze} s`:""}`;
-    d.onclick=e=>{ if(!e.target.closest("button")) recShow(c); };
-    d.onkeydown=e=>{ if((e.key==="Enter"||e.key===" ")&&e.target===d){ e.preventDefault(); recShow(c); } };
-    d.querySelector('[data-a="load"]').onclick=()=>{ S.inF=c.inF; S.outF=c.outF; $("freeze").value=c.freeze||0; $("outName").value=c.name; checkName(); seekFrame(c.inF); saveStore(); };
+    d.onclick=e=>{ if(!e.target.closest("button")) loadClip(c); };
+    d.onkeydown=e=>{ if((e.key==="Enter"||e.key===" ")&&e.target===d){ e.preventDefault(); loadClip(c); } };
     const dl=d.querySelector('[data-a="dl"]'); if(dl) dl.onclick=()=>download(c.name);
     d.querySelector('[data-a="del"]').onclick=()=>{ S.clips.splice(i,1); S.blobs.delete(c.name); blobDel(c.name);
       if(REC.clip&&REC.clip.name===c.name) clearRec();
@@ -4276,7 +4224,7 @@ $("bPlay").onclick=togglePlay;
 $("bBackF").onclick=()=>step(-1); $("bFwdF").onclick=()=>step(1);
 $("bBackS").onclick=()=>step(-fpsInt()); $("bFwdS").onclick=()=>step(fpsInt());
 $("bSetIn").onclick=setIn; $("bSetOut").onclick=setOut; $("bPlayClip").onclick=playClip;
-$("bStill").onclick=saveStill; $("bExport").onclick=exportClip; $("bDownload").onclick=()=>REC.clip&&download(REC.clip.name);
+$("bStill").onclick=saveStill; $("bExport").onclick=exportClip;
 $("bAddQ").onclick=()=>{ const q=newQ(); const n=S.clips.length; if(n) q.media=S.clips[n-1].name; S.qs.push(q); saveStore(); renderQs(); };
 $("bCopy").onclick=copyJson; $("bZip").onclick=downloadZip; $("bShuffle").onclick=shuffleQs;
 const doGoto=()=>{ const f=parseInput($("goto").value); if(f==null) return setStatus("Tidkoden gick inte att tolka.","err"); if(!vid.paused) vid.pause(); seekFrame(f); };
