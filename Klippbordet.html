@@ -95,12 +95,14 @@ pre.json{margin:0;font:11.5px/1.45 var(--f-tc);background:var(--raise);border:1p
 .sep{height:1px;background:var(--line)}
 details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 .keys{font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px}
-.monitors{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.monitors{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
 @media (max-width:700px){.monitors{grid-template-columns:minmax(0,1fr)}}
 .mon{display:grid;gap:6px;min-width:0;align-content:start}
 .monhead{display:flex;align-items:baseline;justify-content:space-between;gap:4px 10px;flex-wrap:wrap}
 .monlabel{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
-.mon .tc{font-size:22px}
+.mon .tc{font-size:26px}
+/* En skärm: begränsa höjden så att tidslinjen syns utan att skrolla. */
+.mon .screen{width:min(100%,calc(58vh*16/9));margin-inline:auto}
 .screen .empty{position:absolute;inset:0;display:grid;place-items:center;color:#c3cdcf;font-size:13px;text-align:center;padding:16px}
 .tlbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
 .tlbar h2{margin-right:auto}
@@ -142,6 +144,11 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 .q details{display:grid;gap:8px}
 .q details[open]>summary{margin-bottom:8px}
 .q .edit{display:grid;gap:8px}
+.trlist{display:flex;flex-direction:column;gap:1px;max-height:340px;overflow-y:auto;background:var(--raise);border:1px solid var(--line);border-radius:6px;padding:4px}
+.trl{flex:none;width:100%;display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:baseline;text-align:left;background:none;border:0;border-radius:4px;padding:4px 6px;min-height:0;font:13px/1.4 var(--f-ui);color:var(--fg);cursor:pointer}
+.trl:hover,.trl:focus-visible{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.trl span{font:11.5px var(--f-tc);color:var(--muted);font-variant-numeric:tabular-nums}
+.trl b{font-weight:400;overflow-wrap:anywhere}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
@@ -164,20 +171,6 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
             <div class="drop" id="drop"><div><strong>Dra in en avsnittsfil hit</strong><p>eller välj ”Öppna avsnitt”. Filen stannar på datorn och laddas inte upp någonstans.</p></div></div>
           </div>
           <div class="tcrow"><span class="tcsub" id="tcrel">från filstart --:--:--</span><span class="tcsub" id="tcframe">bildruta –</span></div>
-        </section>
-        <section class="mon" aria-label="Klipp">
-          <div class="monhead"><span class="monlabel">Klipp</span><span class="tc" id="rtc">--:--:--:--</span></div>
-          <div class="screen">
-            <video id="resVid" playsinline preload="auto"></video>
-            <div class="empty" id="recEmpty">Exportera ett klipp eller välj ett i bin.</div>
-          </div>
-          <div class="tcrow"><span class="tcsub" id="recPos">–</span><span class="tcsub" id="recName"></span></div>
-          <div class="transport">
-            <button id="rStart" disabled>Till början</button>
-            <button id="rPlay" class="primary" disabled style="min-width:92px">Spela</button>
-            <button id="bDownload" hidden>Ladda ner</button>
-          </div>
-          <p class="note" id="recInfo"></p>
         </section>
       </div>
 
@@ -239,6 +232,28 @@ details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
     </section>
 
     <aside class="stage side">
+
+      <section class="panel" aria-labelledby="h-tr" id="trPanel">
+        <h2 id="h-tr">Transkribera tal</h2>
+        <p class="note">Gör om talet i avsnittet till text med tidkoder. Taligenkänningen (KB-Whisper från Kungliga biblioteket) körs här i webbläsaren, så ljudet lämnar inte datorn. Modellen hämtas första gången och sparas sedan i webbläsaren.</p>
+        <div class="grid2">
+          <div class="field"><label for="trModel">Modell</label><select id="trModel">
+            <option value="tiny">Snabb · ca 120 MB</option>
+            <option value="base" selected>Bra · ca 180 MB</option>
+            <option value="small">Bäst · ca 400 MB, långsam</option></select></div>
+          <div class="field"><label for="trRange">Del av avsnittet</label><select id="trRange">
+            <option value="all">Hela avsnittet</option>
+            <option value="io">Mellan IN och UT</option></select></div>
+        </div>
+        <div class="row"><button id="trGo" class="primary">Transkribera</button><button id="trStop" hidden>Avbryt</button></div>
+        <div class="progress" id="trProg" hidden><i id="trBar"></i></div>
+        <p class="note" id="trStatus">Ljudkanaler väljs som under Inställningar. Tidkoderna är ungefärliga, och namn och ovanliga ord kan bli fel.</p>
+        <div id="trOut" hidden style="display:grid;gap:8px">
+          <div class="trlist" id="trList" role="list" aria-label="Transkription, klicka för att gå till tidkoden"></div>
+          <div class="row"><button id="trUse" hidden>Använd som underlag för frågor</button><button id="trCopy">Kopiera</button><button id="trSrt">Ladda ner .srt</button><button id="trClear">Rensa</button></div>
+          <p class="note" id="trMsg"></p>
+        </div>
+      </section>
 
       <section class="panel" aria-labelledby="h-sug" id="sugPanel" hidden>
         <h2 id="h-sug">Föreslå frågor med Claude</h2>
@@ -3519,7 +3534,7 @@ async function openFile(file){
   } else { $("startTc").value="01:00:00:00"; $("startTc").dataset.src="antagen"; }
   S.startTcFrames=tcToFrames($("startTc").value)??tcToFrames("01:00:00:00");
   $("fpsNote").textContent=`Bildfrekvens: ${S.fps} rutor/s${S.df?" (drop frame)":""} · starttidkod ${$("startTc").value} (${$("startTc").dataset.src==="fil"?"läst ur filen":"antagen, kontrollera"})`;
-  loadStore(); suggestName(); renderAll(); sugLoad(); blobRestore(); $("sugEp").dataset.manual=""; subsRender();
+  loadStore(); suggestName(); renderAll(); sugLoad(); trLoad(); blobRestore(); $("sugEp").dataset.manual=""; subsRender();
   vid.src=setUrl("vid",file);
 }
 vid.addEventListener("loadedmetadata",()=>{
@@ -3810,52 +3825,13 @@ tlEl.addEventListener("wheel",e=>{
 $("zIn").onclick=()=>tlZoom(0.5); $("zOut").onclick=()=>tlZoom(2);
 $("zFit").onclick=()=>tlSetView(0,S.dur); $("zClip").onclick=tlFitClip;
 
-/* ---------- klippmonitor ----------
-   Visar den exporterade filen om den finns i minnet, annars spelas IN→UT direkt ur källan. */
-const rv=$("resVid"), REC={mode:null,clip:null};
+/* ---------- vald klipp i bin ----------
+   En skärm: att välja ett klipp lägger dess IN och UT i källan. */
+const REC={clip:null};
 const recLen=c=>c.outF-c.inF+1;
-function recFrame(){ const f=Math.floor(rv.currentTime*S.fps+1e-3); return REC.mode==="src"?f-REC.clip.inF:f; }
-function recSeek(k){ rv.currentTime=((REC.mode==="src"?REC.clip.inF:0)+k+0.25)/S.fps; }
-function recShow(clip){
-  rv.pause(); REC.clip=clip; const blob=S.blobs.get(clip.name);
-  if(blob){ REC.mode="blob"; rv.src=setUrl("res",blob); }
-  else { REC.mode="src"; if(S.urls.res){ URL.revokeObjectURL(S.urls.res); S.urls.res=null; } rv.src=S.urls.vid; }
-  rv.onloadedmetadata=()=>recSeek(0);
-  $("recEmpty").hidden=true; $("rPlay").disabled=$("rStart").disabled=false; $("bDownload").hidden=!blob;
-  $("recName").textContent=clip.name;
-  const len=(recLen(clip)/S.fps).toFixed(2)+" s"+(clip.freeze?` + frys ${clip.freeze} s`:"");
-  $("recInfo").textContent=blob?`Exporterad fil · ${(blob.size/1e6).toFixed(2)} MB · ${len}`:`Förhandsvisning ur källan · ${len}${clip.freeze?" (frysrutan visas inte)":""}. Exportera igen för att få filen.`;
-  recUi(); renderClips();
-}
-function clearRec(){
-  rv.pause(); rv.removeAttribute("src"); rv.load(); REC.mode=REC.clip=null;
-  if(S.urls.res){ URL.revokeObjectURL(S.urls.res); S.urls.res=null; }
-  $("recEmpty").hidden=false; $("rPlay").disabled=$("rStart").disabled=true; $("bDownload").hidden=true;
-  $("rtc").textContent="--:--:--:--"; $("recPos").textContent="–"; $("recName").textContent=""; $("recInfo").textContent="";
-}
-function recUi(){
-  const c=REC.clip; if(!c) return;
-  const n=recLen(c), k=Math.max(0,recFrame()), total=n+(REC.mode==="blob"?Math.round((c.freeze||0)*S.fps):0);
-  $("rtc").textContent=k<n?srcTc(c.inF+k):srcTc(c.outF)+" frys";
-  $("recPos").textContent=`${framesToRel(Math.min(k,total-1))} / ${framesToRel(total)}`;
-}
-function recPlay(){
-  if(!REC.clip) return;
-  if(!rv.paused) return rv.pause();
-  const n=recLen(REC.clip);
-  if(REC.mode==="src"&&recFrame()>=n-1){ recSeek(0); rv.addEventListener("seeked",()=>rv.play(),{once:true}); }
-  else { if(rv.ended) rv.currentTime=0; rv.play(); }
-}
-function recTick(){
-  if(rv.paused||!REC.clip) return;
-  if(REC.mode==="src"&&recFrame()>=recLen(REC.clip)){ rv.pause(); recSeek(recLen(REC.clip)-1); }
-  recUi(); requestAnimationFrame(recTick);
-}
-rv.addEventListener("play",()=>{ $("rPlay").textContent="Paus"; recTick(); });
-rv.addEventListener("pause",()=>{ $("rPlay").textContent="Spela"; recUi(); });
-rv.addEventListener("seeked",recUi);
-rv.addEventListener("click",recPlay);
-$("rPlay").onclick=recPlay; $("rStart").onclick=()=>{ rv.pause(); recSeek(0); };
+function recShow(clip){ REC.clip=clip; renderClips(); }
+function clearRec(){ REC.clip=null; }
+function loadClip(c){ REC.clip=c; S.inF=c.inF; S.outF=c.outF; $("freeze").value=c.freeze||0; $("outName").value=c.name; checkName(); seekFrame(c.inF); saveStore(); renderClips(); }
 
 /* ---------- gränssnitt ---------- */
 function updateUi(){
@@ -4122,16 +4098,15 @@ function renderClips(){
   $("clipsEmpty").hidden=S.clips.length>0;
   S.clips.forEach((c,i)=>{
     const d=document.createElement("div"); d.className="card"+(REC.clip&&REC.clip.name===c.name?" sel":""); d.tabIndex=0;
-    d.title="Visa i klippmonitorn";
+    d.title="Lägg IN och UT i källan";
     d.innerHTML=`<img class="th" alt=""><div class="meta"><b></b><span data-k="tc"></span><span data-k="len"></span></div>
-      <div class="acts"><button data-a="load" title="Lägg IN och UT i källan">Till källan</button>${S.blobs.has(c.name)?'<button data-a="dl">Ladda ner</button>':""}<button data-a="del" aria-label="Ta bort ur bin">✕</button></div>`;
+      <div class="acts">${S.blobs.has(c.name)?'<button data-a="dl">Ladda ner</button>':""}<button data-a="del" aria-label="Ta bort ur bin">✕</button></div>`;
     const img=d.querySelector("img"); if(c.thumb) img.src=c.thumb; else { img.removeAttribute("src"); ensureClipThumb(c); }
     d.querySelector("b").textContent=c.name; d.querySelector("b").title=c.name;
     d.querySelector('[data-k="tc"]').textContent=`${c.inTc} → ${c.outTc}`;
     d.querySelector('[data-k="len"]').textContent=`${(recLen(c)/S.fps).toFixed(2)} s${c.freeze?` + frys ${c.freeze} s`:""}`;
-    d.onclick=e=>{ if(!e.target.closest("button")) recShow(c); };
-    d.onkeydown=e=>{ if((e.key==="Enter"||e.key===" ")&&e.target===d){ e.preventDefault(); recShow(c); } };
-    d.querySelector('[data-a="load"]').onclick=()=>{ S.inF=c.inF; S.outF=c.outF; $("freeze").value=c.freeze||0; $("outName").value=c.name; checkName(); seekFrame(c.inF); saveStore(); };
+    d.onclick=e=>{ if(!e.target.closest("button")) loadClip(c); };
+    d.onkeydown=e=>{ if((e.key==="Enter"||e.key===" ")&&e.target===d){ e.preventDefault(); loadClip(c); } };
     const dl=d.querySelector('[data-a="dl"]'); if(dl) dl.onclick=()=>download(c.name);
     d.querySelector('[data-a="del"]').onclick=()=>{ S.clips.splice(i,1); S.blobs.delete(c.name); blobDel(c.name);
       if(REC.clip&&REC.clip.name===c.name) clearRec();
@@ -4249,7 +4224,7 @@ $("bPlay").onclick=togglePlay;
 $("bBackF").onclick=()=>step(-1); $("bFwdF").onclick=()=>step(1);
 $("bBackS").onclick=()=>step(-fpsInt()); $("bFwdS").onclick=()=>step(fpsInt());
 $("bSetIn").onclick=setIn; $("bSetOut").onclick=setOut; $("bPlayClip").onclick=playClip;
-$("bStill").onclick=saveStill; $("bExport").onclick=exportClip; $("bDownload").onclick=()=>REC.clip&&download(REC.clip.name);
+$("bStill").onclick=saveStill; $("bExport").onclick=exportClip;
 $("bAddQ").onclick=()=>{ const q=newQ(); const n=S.clips.length; if(n) q.media=S.clips[n-1].name; S.qs.push(q); saveStore(); renderQs(); };
 $("bCopy").onclick=copyJson; $("bZip").onclick=downloadZip; $("bShuffle").onclick=shuffleQs;
 const doGoto=()=>{ const f=parseInput($("goto").value); if(f==null) return setStatus("Tidkoden gick inte att tolka.","err"); if(!vid.paused) vid.pause(); seekFrame(f); };
@@ -4614,6 +4589,236 @@ function sugImgUi(){ const on=$("sugImg").checked; $("sugRangeField").hidden=!on
   if(on&&SIMG.lim){ $("sugImgNote").textContent=`${SIMG.lim.maxCount} bildrutor skickas, jämnt fördelade. För fler detaljer: markera en scen med IN och UT och välj "Bara mellan IN och UT". Claude känner inte igen vem någon är; namn måste stå i undertexten eller i bild.`; } }
 $("sugImg").onchange=sugImgUi;
 $("sugType").addEventListener("change",()=>{ const o=$("sugType").selectedOptions[0]; if(o&&o.parentElement.tagName==="OPTGROUP"&&!$("sugImgBox").hidden&&!$("sugImg").checked){ $("sugImg").checked=true; sugImgUi(); } });
+/* ---------- Transkribera tal ----------
+   Talet blir text med KB-Whisper (Kungliga bibliotekets svenska Whisper-modeller) via transformers.js,
+   här i webbläsaren. Biblioteket hämtas från jsDelivr och modellen från Hugging Face första gången;
+   sedan ligger de i webbläsarens cache. Ljudet avkodas med Mediabunny, mixas till mono, samplas om
+   till 16 kHz och delas i block om högst 30 sekunder, helst vid ett tyst ställe. */
+const TR_LIB="https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5/dist/transformers.min.js";
+const TR_MODELS={tiny:"onnx-community/kb-whisper-tiny-ONNX",base:"onnx-community/kb-whisper-base-ONNX",small:"onnx-community/kb-whisper-small-ONNX"};
+const TR_SR=16000;
+const TR={segs:[],run:null,worker:null,model:null,device:null,id:0,pending:null};
+/* Motorn körs i en egen tråd (Web Worker) så att sidan inte hackar. Går det inte att starta en
+   sådan körs samma kod på sidan i stället. Den skickas som text till tråden, så den får inte
+   använda något utanför sig själv. */
+function trEngine(post,LIB){
+  let asr=null,key=null,dev=null;
+  return async m=>{
+    try{
+      if(m.type==="load"){
+        if(asr&&key===m.model){ post({type:"ready",device:dev}); return; }
+        if(asr){ try{ await asr.dispose(); }catch(_){} asr=null; key=null; }
+        const T=await import(LIB);
+        T.env.allowLocalModels=false;
+        const files={};
+        const progress_callback=p=>{ if(p.status!=="progress"||!p.file) return; files[p.file]={l:p.loaded||0,t:p.total||0};
+          let l=0,t=0; for(const k in files){ l+=files[k].l; t+=files[k].t; } post({type:"progress",loaded:l,total:t}); };
+        const q8={encoder_model:"q8",decoder_model_merged:"q8"};
+        dev="wasm";
+        try{ if(navigator.gpu&&await navigator.gpu.requestAdapter()) dev="webgpu"; }catch(_){}
+        if(dev==="webgpu"){
+          try{ asr=await T.pipeline("automatic-speech-recognition",m.model,{device:"webgpu",dtype:{encoder_model:"fp32",decoder_model_merged:"q4"},progress_callback}); }
+          catch(e){ console.warn("WebGPU gick inte, kör på processorn",e); dev="wasm"; }
+        }
+        if(!asr) asr=await T.pipeline("automatic-speech-recognition",m.model,{device:"wasm",dtype:q8,progress_callback});
+        key=m.model; post({type:"ready",device:dev});
+      } else if(m.type==="run"){
+        const out=await asr(m.audio,{language:"sv",task:"transcribe",return_timestamps:true});
+        post({type:"result",id:m.id,chunks:(out.chunks||[]).map(c=>({s:c.timestamp[0],e:c.timestamp[1],t:c.text}))});
+      }
+    }catch(e){ post({type:"error",id:m.id,message:String((e&&e.message)||e)}); }
+  };
+}
+function trInline(){
+  const t=new EventTarget(), h=trEngine(m=>t.dispatchEvent(new MessageEvent("message",{data:m})),TR_LIB);
+  t.postMessage=m=>setTimeout(()=>h(m),0); t.terminate=()=>{}; t.inline=true; return t;
+}
+function trWorker(){
+  if(TR.worker) return TR.worker;
+  let w=null;
+  try{
+    const src=`const h=(${trEngine.toString()})(m=>self.postMessage(m),${JSON.stringify(TR_LIB)});self.onmessage=e=>h(e.data);`;
+    w=new Worker(URL.createObjectURL(new Blob([src],{type:"text/javascript"})),{type:"module"});
+  }catch(_){ w=null; }
+  return TR.worker=w||trInline();
+}
+/* Skickar ett meddelande till motorn och väntar på svaret. */
+function trCall(msg,onProg){
+  const w=trWorker();
+  return new Promise((res,rej)=>{
+    const done=()=>{ w.removeEventListener("message",on); w.removeEventListener("error",onErr); TR.pending=null; };
+    const on=e=>{ const d=e.data;
+      if(d.type==="progress"){ onProg&&onProg(d); return; }
+      if(d.id!=null&&d.id!==msg.id) return;
+      done(); if(d.type==="error") rej(new Error(d.message)); else res(d); };
+    const onErr=e=>{ e.preventDefault&&e.preventDefault(); done(); rej({code:"worker",message:e.message||"Tråden kunde inte startas."}); };
+    TR.pending=x=>{ done(); rej(x); };
+    w.addEventListener("message",on); w.addEventListener("error",onErr);
+    if(w.inline) w.postMessage(msg); else w.postMessage(msg,msg.audio?[msg.audio.buffer]:[]);
+  });
+}
+async function trLoadModel(model,onProg){
+  if(TR.model===model&&TR.worker) return TR.device;
+  let r;
+  try{ r=await trCall({type:"load",model},onProg); }
+  catch(e){
+    if(!(e&&e.code==="worker")||(TR.worker&&TR.worker.inline)) throw e;
+    // Tråden fick inte starta här: kör på sidan i stället.
+    try{ TR.worker.terminate(); }catch(_){} TR.worker=trInline();
+    r=await trCall({type:"load",model},onProg);
+  }
+  TR.model=model; TR.device=r.device; return r.device;
+}
+/* Mono i ursprunglig takt → 16 kHz. Medelvärde över varje utdataprov (enkelt lågpassfilter). */
+function trResampler(rate){
+  const step=rate/TR_SR, w=Math.max(1,Math.floor(step)); let buf=new Float32Array(0), pos=0;
+  return x=>{
+    const nb=new Float32Array(buf.length+x.length); nb.set(buf); nb.set(x,buf.length); buf=nb;
+    const out=new Float32Array(Math.max(0,Math.ceil((buf.length-w-pos)/step)+1)); let k=0;
+    while(pos+w<=buf.length&&k<out.length){ const i0=Math.floor(pos); let s=0; for(let i=i0;i<i0+w;i++) s+=buf[i]; out[k++]=s/w; pos+=step; }
+    const drop=Math.min(buf.length,Math.floor(pos)); buf=buf.slice(drop); pos-=drop;
+    return out.subarray(0,k);
+  };
+}
+/* Tystaste 0,2 sekunderna mellan lo och hi (index i 16 kHz-prov). */
+function trQuietCut(buf,lo,hi){
+  const fr=320, win=10, nF=Math.floor((hi-lo)/fr), e=new Float32Array(nF);
+  for(let f=0;f<nF;f++){ let s=0; for(let i=lo+f*fr,j=i+fr;i<j;i++) s+=buf[i]*buf[i]; e[f]=s; }
+  let best=Infinity,at=hi,sum=0;
+  for(let f=0;f<nF;f++){ sum+=e[f]; if(f>=win) sum-=e[f-win]; if(f>=win-1&&sum<best){ best=sum; at=lo+(f-win/2+1)*fr; } }
+  return at;
+}
+const trRms=a=>{ let s=0; for(let i=0;i<a.length;i+=4) s+=a[i]*a[i]; return Math.sqrt(s/Math.max(1,Math.ceil(a.length/4))); };
+/* Whisper hittar ibland på text i musik och tystnad, ofta textningsreklam eller hälsningsfraser
+   som den sett i träningsdata. Sådana rader och upprepningar i följd tas bort. */
+const TR_JUNK=/^[\s.…♪*\-–]*$|^[\[(].*[\])]$|textning|undertext(er|ning)? (av|från)|tack för att (ni|du) (tittade|såg|lyssnade)|prenumerera/i;
+function trAccept(list,t){
+  if(!t||TR_JUNK.test(t)) return false;
+  const n=list.length; if(n>=2&&list[n-1].t===t&&list[n-2].t===t) return false;
+  return true;
+}
+function trChannels(nCh){
+  if(nCh<=2) return [...Array(nCh).keys()];
+  const map=$("audioMap").value;
+  if(map==="34") return [2,3].filter(c=>c<nCh);
+  if(map==="mix") return [...Array(nCh).keys()];
+  return [0,1];
+}
+const trMin=s=>{ s=Math.max(0,Math.round(s)); return `${Math.floor(s/60)}:${pad(s%60)}`; };
+function trSet(t,cls){ $("trStatus").textContent=t; $("trStatus").className=cls||"note"; }
+function trBusy(on){ $("trGo").disabled=on; $("trStop").hidden=!on; $("trProg").hidden=!on; $("trModel").disabled=on; $("trRange").disabled=on; if(!on) $("trBar").style.width="0"; }
+async function trGo(){
+  if(TR.run) return;
+  if(!S.file||!S.dur) return trSet("Öppna ett avsnitt först.","warn");
+  let a=0,b=S.dur;
+  if($("trRange").value==="io"){
+    if(S.inF==null||S.outF==null) return trSet("Sätt IN och UT först, eller välj Hela avsnittet.","warn");
+    a=S.inF/S.fps; b=(S.outF+1)/S.fps;
+  }
+  const run=TR.run={stopped:false,file:S.file,key:key()};
+  const modelKey=$("trModel").value, model=TR_MODELS[modelKey];
+  trBusy(true); trSet("Förbereder…");
+  let added=0, t0=0;
+  try{
+    const inp=new M.Input({source:new M.BlobSource(S.file),formats:M.ALL_FORMATS});
+    const at=await inp.getPrimaryAudioTrack();
+    if(!at) throw new Error("Filen saknar ljudspår.");
+    if(!(await at.canDecode())) throw new Error(`Webbläsaren kan inte avkoda filens ljud (${codecName(at.codec)}).`);
+    if(TR.model!==model||!TR.worker) trSet("Hämtar taligenkänningen…");
+    const dev=await trLoadModel(model,p=>{ if(!p.total) return; $("trBar").style.width=(100*p.loaded/p.total).toFixed(1)+"%";
+      trSet(`Hämtar modellen (bara första gången)… ${Math.round(p.loaded/1e6)} av ${Math.round(p.total/1e6)} MB`); });
+    if(run.stopped) throw {code:"cancelled"};
+    $("trBar").style.width="0";
+    trSet(`Transkriberar… (${dev==="webgpu"?"grafikkortet":"processorn"})`);
+    // Det som redan finns utanför det valda partiet behålls.
+    const keep=TR.segs.filter(s=>s.e<=a+0.05||s.s>=b-0.05), fresh=[];
+    const commit=()=>{ const segs=keep.concat(fresh).sort((x,y)=>x.s-y.s); trSave(run.key,segs); if(key()===run.key){ TR.segs=segs; trRender(); } };
+    let rs=null, buf=new Float32Array(TR_SR*45), n=0, bufT=null, tmp=new Float32Array(4096);
+    t0=performance.now();
+    const flush=async final=>{
+      while(n>=TR_SR*30||(final&&n>TR_SR*0.3)){
+        const cut=n>=TR_SR*30?trQuietCut(buf,TR_SR*20,Math.floor(TR_SR*29.5)):n;
+        const block=buf.slice(0,cut), bt=bufT;
+        if(trRms(block)>0.002){
+          const r=await trCall({type:"run",id:++TR.id,audio:block});
+          for(const c of r.chunks){
+            const t=(c.t||"").trim().replace(/\s+/g," "); if(!trAccept(fresh,t)) continue;
+            const s=bt+Math.max(0,c.s||0), e=bt+Math.min(cut/TR_SR,c.e!=null?c.e:cut/TR_SR);
+            fresh.push({s,e:Math.max(s,e),t});
+          }
+        }
+        buf.copyWithin(0,cut,n); n-=cut; bufT+=cut/TR_SR;
+        if(run.stopped) throw {code:"cancelled"};
+        const done=Math.min(1,(bufT-a)/(b-a)), el=(performance.now()-t0)/1000;
+        $("trBar").style.width=(100*done).toFixed(1)+"%";
+        trSet(`Transkriberar… ${trMin(bufT-a)} av ${trMin(b-a)}${done>0.02?` · ca ${trMin(el/done-el)} kvar`:""}`);
+        commit();
+      }
+    };
+    for await (const smp of new M.AudioSampleSink(at).samples(a,b)){
+      if(run.stopped){ smp.close(); break; }
+      const rate=smp.sampleRate, nf=smp.numberOfFrames, st=smp.timestamp;
+      const i0=Math.max(0,Math.round((a-st)*rate)), i1=Math.min(nf,Math.round((b-st)*rate));
+      if(i1<=i0){ smp.close(); continue; }
+      if(!rs){ rs=trResampler(rate); bufT=st+i0/rate; }
+      if(tmp.length<nf) tmp=new Float32Array(nf);
+      const chans=trChannels(smp.numberOfChannels), mono=new Float32Array(i1-i0);
+      for(const c of chans){ smp.copyTo(tmp,{planeIndex:c,format:"f32-planar"}); for(let i=i0;i<i1;i++) mono[i-i0]+=tmp[i]; }
+      smp.close();
+      if(chans.length>1) for(let i=0;i<mono.length;i++) mono[i]/=chans.length;
+      const out=rs(mono);
+      if(n+out.length>buf.length){ const nb=new Float32Array(Math.max(buf.length*2,n+out.length)); nb.set(buf.subarray(0,n)); buf=nb; }
+      buf.set(out,n); n+=out.length;
+      if(n>=TR_SR*30) await flush(false);
+    }
+    if(run.stopped) throw {code:"cancelled"};
+    if(bufT!=null) await flush(true);
+    added=fresh.length; commit();
+    const min=(performance.now()-t0)/60000;
+    trSet(added?`Klart: ${added} repliker på ${min<1?"under en minut":Math.round(min)+" min"}. Klicka på en rad för att gå dit. Kontrollera namn och ovanliga ord.`:"Klart, men inget tal hittades. Kontrollera ljudkanalerna under Inställningar.",added?"note":"warn");
+  }catch(e){
+    if(e&&e.code==="cancelled") trSet(TR.segs.length?"Avbrutet. Det som hann bli klart finns kvar.":"Avbrutet.","note");
+    else{
+      console.warn("Transkribering",e);
+      const msg=String((e&&e.message)||e);
+      const net=/fetch|network|load|import|module|Failed|CORS|Content Security|blocked/i.test(msg);
+      trSet(net?`Taligenkänningen kunde inte hämtas (${msg}). Den behöver nå cdn.jsdelivr.net och huggingface.co. Går det inte där du har Klippbordet öppet: öppna Klippbordet.html direkt i Chrome, transkribera där och ladda ner .srt, och läs sedan in den som undertextfil.`:"Transkriberingen avbröts: "+msg,"err");
+    }
+  }finally{ if(TR.run===run) TR.run=null; trBusy(false); }
+}
+function trStop(){
+  const run=TR.run; if(!run) return; run.stopped=true; trSet("Avbryter…");
+  // En tråd kan stoppas direkt; modellen laddas då om (från cachen) nästa gång.
+  if(TR.worker&&!TR.worker.inline){ try{ TR.worker.terminate(); }catch(_){} TR.worker=null; TR.model=null; TR.pending&&TR.pending({code:"cancelled"}); }
+}
+function trLines(){ return TR.segs.map(s=>`${srcTc(Math.round(s.s*S.fps))}  ${s.t}`).join("\n"); }
+function trSrt(){
+  const t=x=>{ const ms=Math.max(0,Math.round(x*1000)); return `${pad(Math.floor(ms/3600000))}:${pad(Math.floor(ms/60000)%60)}:${pad(Math.floor(ms/1000)%60)},${pad(ms%1000,3)}`; };
+  return TR.segs.map((s,k)=>`${k+1}\n${t(s.s)} --> ${t(Math.max(s.e,s.s+0.5))}\n${s.t}\n`).join("\n");
+}
+function trRender(){
+  const has=TR.segs.length>0; $("trOut").hidden=!has;
+  $("trUse").hidden=$("sugPanel").hidden;
+  if(!has){ $("trList").innerHTML=""; return; }
+  const esc=t=>t.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  $("trList").innerHTML=TR.segs.map((s,k)=>`<button class="trl" role="listitem" data-k="${k}"><span>${srcTc(Math.round(s.s*S.fps))}</span><b>${esc(s.t)}</b></button>`).join("");
+}
+function trSave(k,segs){ try{ if(!k) return; if(segs.length) localStorage.setItem(k+":transkript",JSON.stringify({segs})); else localStorage.removeItem(k+":transkript"); }catch(_){} }
+function trLoad(){
+  if(TR.run&&TR.run.key!==key()) trStop();
+  let d=null; try{ const k=key(); d=k&&JSON.parse(localStorage.getItem(k+":transkript")||"null"); }catch(_){}
+  TR.segs=d&&Array.isArray(d.segs)?d.segs:[]; $("trMsg").textContent="";
+  trSet(TR.segs.length?`${TR.segs.length} repliker sparade för den här filen.`:"Ljudkanaler väljs som under Inställningar. Tidkoderna är ungefärliga, och namn och ovanliga ord kan bli fel.");
+  trRender();
+}
+$("trGo").onclick=trGo; $("trStop").onclick=trStop;
+$("trList").onclick=e=>{ const b=e.target.closest(".trl"); if(!b) return; const s=TR.segs[+b.dataset.k]; if(!s||!S.dur) return; if(!vid.paused) vid.pause(); seekFrame(Math.round(s.s*S.fps)); };
+$("trCopy").onclick=async()=>{ try{ await navigator.clipboard.writeText(trLines()); $("trMsg").textContent="Kopierat."; }catch(_){ $("trMsg").textContent="Kunde inte kopiera. Markera texten i listan i stället."; } };
+$("trSrt").onclick=()=>{ const base=(S.file?S.file.name.replace(/\.[^.]+$/,""):"transkript"); saveBlob(new Blob([trSrt()],{type:"text/plain"}),base+".srt"); };
+$("trUse").onclick=()=>{ $("sugText").value=trLines(); $("sugPasteBox").open=true; $("sugPanel").scrollIntoView({behavior:"smooth",block:"start"}); $("trMsg").textContent="Texten ligger nu under ”Klistra in text i stället” i Föreslå frågor."; };
+$("trClear").onclick=()=>{ if(TR.run) return; if(!confirm("Ta bort transkriptionen för den här filen?")) return; TR.segs=[]; trSave(key(),[]); trLoad(); };
+$("startTc").addEventListener("change",trRender);
+SAMPLEP.then(()=>trRender());
 if(!window.VideoEncoder||!M){ setStatus("Den här webbläsaren saknar stöd för videokodning. Öppna filen i Chrome på datorn.","err"); }
 </script>
 </body>
