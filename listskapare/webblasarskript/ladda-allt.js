@@ -3,6 +3,8 @@
 // Skriptet klickar eller scrollar tills inget mer laddas, och sparar sedan hela sidan som
 // HTML. Den filen läser listskapare.py ("python3 listskapare.py sidan.html --visa").
 //
+// På IMDb-listor sparas i stället titlarna direkt som .txt, en per rad.
+//
 // Körs som bokmärke (se README.md), i konsolen (F12 > Console), eller av
 // hamta-med-webblasare.js, som då sätter window.LISTSKAPARE_SPARA = false.
 (async () => {
@@ -58,13 +60,33 @@
   const resultat = `${klick} klick, ${scroll} scrollningar`;
 
   if (!SPARA) return resultat;
+  const namn = (document.title || 'sida').replace(/[^\wåäöÅÄÖ-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'sida';
+  const ladda = (innehall, typ, fil) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([innehall], { type: typ + ';charset=utf-8' }));
+    a.download = fil;
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  // IMDb-listor sparas direkt som .txt, "Titel (år)", en per rad
+  const imdb = /(^|\.)imdb\.com$/.test(location.hostname)
+    ? [...document.querySelectorAll('li.ipc-metadata-list-summary-item')] : [];
+  if (imdb.length) {
+    const rader = imdb.map(li => {
+      const titel = (li.querySelector('h3')?.textContent || '').replace(/^\s*\d+\.\s*/, '').trim();
+      const ar = [...li.querySelectorAll('span')].map(s => s.textContent.trim())
+        .find(t => /^\d{4}(–(\d{4})?)?$/.test(t));
+      return titel ? (ar ? `${titel} (${ar})` : titel) : '';
+    }).filter(Boolean);
+    ladda(rader.join('\n') + '\n', 'text/plain', `${namn}.txt`);
+    visa(`Klart (${resultat}). ${rader.length} titlar sparade i ${namn}.txt.`);
+    return;
+  }
+
+  // Alla andra sidor: spara hela sidan, som listskapare.py sedan läser
   ruta.remove();
   const html = '<!doctype html>\n' + document.documentElement.outerHTML;
   document.body.appendChild(ruta);
-  const namn = (document.title || 'sida').replace(/[^\wåäöÅÄÖ-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
-  a.download = `${namn || 'sida'}.html`;
-  document.body.appendChild(a); a.click(); a.remove();
-  visa(`Klart (${resultat}). Sidan sparad som ${a.download}.`);
+  ladda(html, 'text/html', `${namn}.html`);
+  visa(`Klart (${resultat}). Sidan sparad som ${namn}.html.`);
 })();

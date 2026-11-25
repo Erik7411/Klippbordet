@@ -21,8 +21,9 @@ Allt finns i skillens mapp (här kallad `SKILLMAPP`):
   vald lista. Kräver Python 3.10+ med `beautifulsoup4` och `lxml`
   (`pip install beautifulsoup4 lxml` om importen misslyckas).
 - `webblasarskript/hamta-med-webblasare.js` – används av `--webblasare`; kräver Node.js och Playwright.
-- `webblasarskript/ladda-allt.bokmarke.txt` – bokmärke Eken kör i sin egen webbläsare.
-- `webblasarskript/imdb-lista.bokmarke.txt` – bokmärke som sparar en IMDb-lista direkt som .txt.
+- `bokmarke.html` – installationssida för bokmärket "Listskapare": Eken drar en knapp till
+  bokmärkesfältet. Bokmärket laddar hela listan i Ekens egen webbläsare; IMDb-listor sparas
+  direkt som .txt, andra sidor som .html. Adressen finns också i `webblasarskript/ladda-allt.bokmarke.txt`.
 - `README.md` – samma rutin skriven för människor. Läs den bara om något här är oklart.
 
 Kör alltid skriptet i stället för att skriva egen skrapkod: det är testat, städar bort fotnoter
@@ -125,11 +126,11 @@ onödig risk. Gör så här, i ordning, och berätta för Eken vad du valde och 
    Säg tydligt att det **inte** är en kopia av IMDb:s egen topplista, att IMDb inte redovisar hur
    den väljs ut, och att datafilerna enligt IMDb är "for personal and non-commercial use".
    Fler val: `--minroster`, `--typ movie,tvSeries`, `--originaltitel`, `--utan-ar`.
-2. **Ekens egen webbläsare.** Sidan fungerar oftast för vanliga besökare. Skicka
-   `webblasarskript/ladda-allt.bokmarke.txt` och förklara: skapa ett bokmärke med raden som adress,
-   öppna listan, klicka på bokmärket, vänta på "Klart", skicka den sparade HTML-filen hit. Kör
-   sedan `listskapare.py` på filen. För IMDb-listor finns `imdb-lista.bokmarke.txt`, som ger .txt
-   direkt.
+2. **Ekens egen webbläsare.** Sidan fungerar oftast för vanliga besökare. Har Eken inte
+   bokmärket "Listskapare" än: skicka `bokmarke.html` och be Eken öppna den och dra knappen till
+   bokmärkesfältet. Sedan: öppna listan, klicka på bokmärket, vänta på "Klart". En IMDb-lista blir
+   då en färdig .txt (kontrollera den ändå). Andra sidor blir en .html-fil som Eken skickar hit;
+   kör `listskapare.py` på den.
 3. **En annan källa** med samma lista, t.ex. Wikipedia.
 
 ## Fyll aldrig i ur minnet utan att säga det

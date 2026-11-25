@@ -40,7 +40,7 @@ Se först efter hur sidan går vidare till nästa del av listan. Det finns tre v
 |---|---|
 | Adressen ändras med ett sidnummer: `…?page=2`, `…/sida/3/` | Skriv `{sida}` där numret står. Skriptet räknar uppåt tills en sida är tom eller likadan som den förra. |
 | En länk "Nästa" byter sida, men adressen följer inget mönster | Ange länken med `--nasta` och en CSS-selektor. |
-| Knappen "Visa fler"/"Load more", eller mer laddas när man scrollar | `--webblasare`, eller bokmärket "Ladda allt" (nedan). |
+| Knappen "Visa fler"/"Load more", eller mer laddas när man scrollar | `--webblasare`, eller bokmärket "Listskapare" (nedan). |
 
 ```bash
 python3 listskapare/listskapare.py "https://exempel.se/lista?page={sida}" --visa
@@ -57,16 +57,20 @@ mellan sidorna (`--paus`) och går högst 50 sidor (`--maxsidor`).
 håller på tills inget nytt laddas två gånger i rad, eller högst 300 gånger (`--max-rundor`). Det
 kräver Node.js och Playwright.
 
-### Bokmärket "Ladda allt"
+### Bokmärket "Listskapare"
 
 Samma sak, men i din egen webbläsare. Det behövs när en sida spärrar hämtningar från skript, men
 fungerar för vanliga besökare.
 
-1. **En gång:** skapa ett bokmärke och klistra in hela raden i
-   `webblasarskript/ladda-allt.bokmarke.txt` som adress.
+1. **En gång:** öppna `bokmarke.html` i webbläsaren och dra knappen "Listskapare" upp till
+   bokmärkesfältet. (Går det inte: skapa ett bokmärke för valfri sida, välj Redigera och klistra
+   in raden i `webblasarskript/ladda-allt.bokmarke.txt` som adress.)
 2. **Varje gång:** öppna listan och klicka på bokmärket. En ruta uppe till höger visar hur det går.
-   När den säger "Klart" har hela sidan sparats som en `.html`-fil bland dina hämtade filer.
-3. Kör `python3 listskapare/listskapare.py sidan.html --visa`, eller ladda upp filen till Claude.
+   När den säger "Klart" har sidan sparats bland dina hämtade filer:
+   - **IMDb-listor** sparas direkt som `.txt`, en titel per rad i formen `Titel (år)`.
+   - **Alla andra sidor** sparas som `.html`.
+3. För en `.html`-fil: kör `python3 listskapare/listskapare.py sidan.html --visa`, eller skicka
+   filen till Claude.
 
 Bokmärket klickar inte på länkar som byter sida, eftersom det redan laddade då försvinner. För
 listor med "Nästa"-länkar fungerar `--nasta` eller `{sida}` bättre.
@@ -78,8 +82,8 @@ listor med "Nästa"-länkar fungerar `--nasta` eller `{sida}` bättre.
 - En sida som tar bort de första posterna när nya laddas (vanligt i mycket långa flöden) ger en
   ofullständig lista. Kontrollera alltid antalet rader mot källan.
 
-Ändrar du ett webbläsarskript: kör `python3 webblasarskript/gor-bokmarke.py webblasarskript/ladda-allt.js`
-så att bokmärket uppdateras.
+Ändrar du `ladda-allt.js`: kör `python3 webblasarskript/gor-bokmarke.py webblasarskript/ladda-allt.js`
+så att bokmärket och `bokmarke.html` uppdateras.
 
 ## Sidor som blockerar automatiska hämtningar
 
@@ -95,23 +99,8 @@ Vissa webbplatser (t.ex. IMDb) stoppar skript. Kringgå inte spärren. Gör i st
    tills alla poster syns innan du sparar.
 3. **En annan källa** med samma lista, t.ex. Wikipedia.
 
-### IMDb-listor direkt från webbläsaren
-
-`webblasarskript/imdb-lista.js` körs i din egen webbläsare på en öppen IMDb-lista. Det klickar
-"50 more" tills allt har laddats och laddar sedan ner en `.txt` med en titel per rad, i formen
-`Titel (år)`. Det väntar 1,5 sekunder mellan klicken.
-
-**Som bokmärke (en gång):** skapa ett nytt bokmärke i webbläsaren och klistra in hela raden i
-`webblasarskript/imdb-lista.bokmarke.txt` som adress.
-
-**Varje gång:** öppna listan, t.ex.
-`https://www.imdb.com/search/title/?groups=top_1000&sort=user_rating,desc`, klicka på bokmärket
-och vänta tills rutan uppe till höger säger "Klart". Filen hamnar bland dina hämtade filer.
-
-Utan bokmärke: tryck F12, välj fliken Console, klistra in innehållet i `imdb-lista.js` och tryck Enter.
-
-Skriptet är testat mot en egen kopia av sidans uppbyggnad, inte mot imdb.com, som blockerar
-hämtningar från den miljö där det skrevs. Om IMDb ändrar sidan kan skriptet behöva justeras.
+IMDb-delen av bokmärket är testad mot en egen kopia av IMDb:s söklistor, inte mot imdb.com, som
+blockerar hämtningar från den miljö där det skrevs. Om IMDb ändrar sidan kan den behöva justeras.
 
 ## Krav
 
