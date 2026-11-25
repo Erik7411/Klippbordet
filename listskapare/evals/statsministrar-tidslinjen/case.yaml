@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: statsministrar-tidslinjen
+expected_outcome: |
+  En txt-fil där varje rad har en statsminister och tillträdesdatum eller år, i kronologisk ordning från Louis De Geer 1876 till Ulf Kristersson 2022, och en redovisning av källan.
