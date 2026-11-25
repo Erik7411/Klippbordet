@@ -72,15 +72,27 @@
   const imdb = /(^|\.)imdb\.com$/.test(location.hostname)
     ? [...document.querySelectorAll('li.ipc-metadata-list-summary-item')] : [];
   if (imdb.length) {
+    const rensa = t => (t || '').replace(/\s+/g, ' ').replace(/^\s*\d+\.\s*/, '').trim();
     const rader = imdb.map(li => {
-      const titel = (li.querySelector('h3')?.textContent || '').replace(/^\s*\d+\.\s*/, '').trim();
-      const ar = [...li.querySelectorAll('span')].map(s => s.textContent.trim())
+      // Rubriken i första hand, annars länken till filmens sida (/title/tt…)
+      let titel = rensa(li.querySelector('h3, .ipc-title__text')?.textContent);
+      if (!titel) {
+        const lank = [...li.querySelectorAll('a[href*="/title/tt"]')].find(a => rensa(a.textContent));
+        titel = rensa(lank?.textContent || lank?.getAttribute('aria-label'));
+      }
+      const ar = [...li.querySelectorAll('span, div, li')]
+        .filter(el => !el.children.length).map(el => el.textContent.trim())
         .find(t => /^\d{4}(–(\d{4})?)?$/.test(t));
       return titel ? (ar ? `${titel} (${ar})` : titel) : '';
     }).filter(Boolean);
-    ladda(rader.join('\n') + '\n', 'text/plain', `${namn}.txt`);
-    visa(`Klart (${resultat}). ${rader.length} titlar sparade i ${namn}.txt.`);
-    return;
+    if (rader.length >= imdb.length / 2) {
+      ladda(rader.join('\n') + '\n', 'text/plain', `${namn}.txt`);
+      visa(`Klart (${resultat}). ${rader.length} av ${imdb.length} titlar sparade i ${namn}.txt.`);
+      return;
+    }
+    // Hittades inte titlarna har IMDb ändrat sidan: spara den som HTML så att det går att rätta
+    visa(`Hittade bara ${rader.length} titlar i ${imdb.length} poster. Sparar sidan som HTML i stället.`);
+    await sov(1500);
   }
 
   // Alla andra sidor: spara hela sidan, som listskapare.py sedan läser
