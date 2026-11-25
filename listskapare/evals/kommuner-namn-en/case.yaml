@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: kommuner-namn-en
+expected_outcome: |
+  En txt-fil med Sveriges 290 kommuner, en per rad, utan numrering eller rubriker, och en redovisning av källa och antal.
