@@ -205,6 +205,9 @@ def kandidater(soup: BeautifulSoup) -> list[tuple[str, list[str]]]:
         s.decompose()
     for s in soup.select(BRUS):
         s.decompose()
+    # Dolda element, t.ex. Wikipedias sorteringsvärden "&&&&032629.&&0" före "32 629"
+    for s in soup.find_all(style=re.compile(r"display\s*:\s*none")):
+        s.decompose()
 
     # 2. Tabeller – en kandidat per kolumn
     for ti, (rubrik, rader) in enumerate(tabeller(soup), 1):
@@ -250,6 +253,9 @@ def tabellkolumner(soup: BeautifulSoup, tabellnr: int, kolumner: list[int],
     for s in soup(["script", "style", "noscript"]):
         s.decompose()
     for s in soup.select(BRUS):
+        s.decompose()
+    # Dolda element, t.ex. Wikipedias sorteringsvärden "&&&&032629.&&0" före "32 629"
+    for s in soup.find_all(style=re.compile(r"display\s*:\s*none")):
         s.decompose()
     tabs = tabeller(soup)
     if not 1 <= tabellnr <= len(tabs):
