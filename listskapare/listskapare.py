@@ -16,6 +16,12 @@ Exempel:
   # Ange själv vad som ska plockas (CSS-selektor) och följ "nästa sida"-länkar
   python3 listskapare.py URL --selektor "h3.title" --nasta "a.next" --ut lista.txt
 
+  # Lista uppdelad på numrerade sidor: skriv {sida} där sidnumret står
+  python3 listskapare.py "https://exempel.se/lista?page={sida}" --kandidat 1 --ut lista.txt
+
+  # Lista med "Visa fler"-knapp eller som laddar mer när man scrollar
+  python3 listskapare.py URL --webblasare --visa
+
   # Sida som blockerar automatiska hämtningar: spara sidan i webbläsaren
   # (Arkiv > Spara som > "Webbsida, endast HTML") och läs den lokala filen
   python3 listskapare.py sparad_sida.html --visa
@@ -47,8 +53,34 @@ UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
 
 # ---------------------------------------------------------------- hämtning
 
-def hamta(kalla: str) -> tuple[str, str]:
+WEBBLASARE = False   # sätts av --webblasare
+MAX_RUNDOR = 0
+
+
+def hamta_med_webblasare(url: str) -> str:
+    """Öppnar sidan i Chromium, laddar alla poster ("Visa fler", scroll) och returnerar HTML."""
+    import subprocess
+    import tempfile
+    skript = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "webblasarskript", "hamta-med-webblasare.js")
+    with tempfile.TemporaryDirectory() as mapp:
+        ut = os.path.join(mapp, "sida.html")
+        r = subprocess.run(["node", skript, url, ut, str(MAX_RUNDOR)])
+        if r.returncode != 0 or not os.path.exists(ut):
+            raise RuntimeError("webbläsaren kunde inte hämta sidan (se ovan)")
+        with open(ut, encoding="utf-8") as f:
+            return f.read()
+
+
+def hamta(kalla: str, tyst_fel: bool = False) -> tuple[str | None, str]:
     """Returnerar (html, bas-url). Källan kan vara en URL eller en lokal fil."""
+    if WEBBLASARE and not os.path.exists(kalla):
+        try:
+            return hamta_med_webblasare(kalla), kalla
+        except Exception as e:
+            if tyst_fel:
+                return None, ""
+            sys.exit(f"Kunde inte hämta {kalla}: {e}")
     if os.path.exists(kalla):
         with open(kalla, encoding="utf-8", errors="replace") as f:
             return f.read(), ""
@@ -62,6 +94,9 @@ def hamta(kalla: str) -> tuple[str, str]:
             charset = r.headers.get_content_charset() or "utf-8"
             return data.decode(charset, errors="replace"), r.geturl()
     except Exception as e:
+        if tyst_fel:
+            print(f"  slut: {kalla} gav {e}", file=sys.stderr)
+            return None, ""
         sys.exit(f"Kunde inte hämta {kalla}: {e}\n"
                  "Om sidan blockerar automatiska hämtningar: spara den i webbläsaren "
                  "och kör skriptet på den sparade filen.")
@@ -212,23 +247,29 @@ def tabellkolumner(soup: BeautifulSoup, tabellnr: int, kolumner: list[int],
     return unika(ut)
 
 
-def med_selektor(kalla: str, selektor: str, nasta: str | None, maxsidor: int,
-                 paus: float) -> list[str]:
-    rader: list[str] = []
-    for sida in range(maxsidor):
+def sidor(kalla: str, nasta: str | None, forsta: int, maxsidor: int, paus: float):
+    """Går igenom en lista som är uppdelad på flera sidor.
+
+    Två sätt: en URL med {sida} där sidnumret ska stå (…?page={sida}), eller en
+    CSS-selektor för "nästa sida"-länken (--nasta). Annars bara en sida.
+    """
+    if "{sida}" in kalla:
+        for nr in range(forsta, forsta + maxsidor):
+            html, _ = hamta(kalla.replace("{sida}", str(nr)), tyst_fel=nr > forsta)
+            if html is None:
+                return
+            yield BeautifulSoup(html, "lxml"), nr
+            time.sleep(paus)
+        return
+    for nr in range(1, maxsidor + 1):
         html, bas = hamta(kalla)
         soup = BeautifulSoup(html, "lxml")
-        traffar = [e.get_text(" ") for e in soup.select(selektor)]
-        print(f"  sida {sida + 1}: {len(traffar)} träffar", file=sys.stderr)
-        rader += traffar
-        if not nasta:
-            break
-        lank = soup.select_one(nasta)
+        lank = soup.select_one(nasta) if nasta else None
+        yield soup, nr
         if not lank or not lank.get("href") or not bas:
-            break
+            return
         kalla = urllib.parse.urljoin(bas, lank["href"])
         time.sleep(paus)
-    return unika(rader)
 
 
 # ---------------------------------------------------------------- IMDb
@@ -293,8 +334,12 @@ def main() -> None:
     ap.add_argument("--selektor", help="CSS-selektor för posterna, t.ex. 'h3.title'")
     ap.add_argument("--nasta", help="CSS-selektor för 'nästa sida'-länken")
     ap.add_argument("--maxsidor", type=int, default=50)
+    ap.add_argument("--forsta-sida", type=int, default=1, help="första sidnumret vid {sida}")
     ap.add_argument("--paus", type=float, default=2.0, help="sekunder mellan sidor")
     ap.add_argument("--max", type=int, help="högst så här många rader")
+    ap.add_argument("--webblasare", action="store_true",
+                    help="öppna sidan i en webbläsare och klicka 'Visa fler'/scrolla tills allt laddats")
+    ap.add_argument("--max-rundor", type=int, default=0, help="högst så många klick/scrollningar")
     ap.add_argument("--tabell", type=int, help="tabellnummer (se --visa)")
     ap.add_argument("--kolumner", help="kolumnnummer att slå ihop, t.ex. 2,4")
     ap.add_argument("--skiljetecken", default=" – ")
@@ -306,27 +351,39 @@ def main() -> None:
     ap.add_argument("--utan-ar", dest="med_ar", action="store_false")
     ap.add_argument("--cache", default=os.path.expanduser("~/.cache/listskapare"))
     args = ap.parse_args()
+    global WEBBLASARE, MAX_RUNDOR
+    WEBBLASARE, MAX_RUNDOR = args.webblasare, args.max_rundor
 
     if args.kalla == "imdb":
         rader = imdb(args)
-    elif args.tabell:
-        html, _ = hamta(args.kalla)
-        kol = [int(k) for k in (args.kolumner or "1").split(",")]
-        rader = tabellkolumner(BeautifulSoup(html, "lxml"), args.tabell, kol, args.skiljetecken)
-    elif args.selektor:
-        rader = med_selektor(args.kalla, args.selektor, args.nasta, args.maxsidor, args.paus)
     else:
-        html, _ = hamta(args.kalla)
-        kand = kandidater(BeautifulSoup(html, "lxml"))
-        if not kand:
-            sys.exit("Hittade inga listor. Prova --selektor.")
-        if args.visa:
-            for i, (namn, v) in enumerate(kand[:15], 1):
-                prov = " | ".join(x if len(x) <= 40 else x[:39] + "…" for x in v[:4])
-                print(f"{i:>2}. {namn} – {len(v)} poster: {prov} …")
-            return
-        namn, rader = kand[args.kandidat - 1]
-        print(f"Använder: {namn}", file=sys.stderr)
+        kol = [int(k) for k in (args.kolumner or "1").split(",")]
+        rader, anvand, forra = [], None, None
+        for soup, nr in sidor(args.kalla, args.nasta, args.forsta_sida, args.maxsidor, args.paus):
+            if args.selektor:
+                nya = unika([e.get_text(" ") for e in soup.select(args.selektor)])
+            elif args.tabell:
+                nya = tabellkolumner(soup, args.tabell, kol, args.skiljetecken)
+            else:
+                kand = kandidater(soup)
+                if not kand:
+                    sys.exit("Hittade inga listor. Prova --selektor.")
+                if args.visa:
+                    for i, (namn, v) in enumerate(kand[:15], 1):
+                        prov = " | ".join(x if len(x) <= 40 else x[:39] + "…" for x in v[:4])
+                        print(f"{i:>2}. {namn} – {len(v)} poster: {prov} …")
+                    return
+                namn, nya = kand[min(args.kandidat, len(kand)) - 1]
+                if anvand is None:
+                    anvand = namn
+                    print(f"Använder: {namn}", file=sys.stderr)
+            antal_fore = len(rader)
+            rader = unika(rader + nya)
+            print(f"  sida {nr}: {len(nya)} poster, {len(rader) - antal_fore} nya", file=sys.stderr)
+            if not nya or nya == forra:
+                print("  tom sida eller samma som förra, slutar", file=sys.stderr)
+                break
+            forra = nya
 
     if args.max:
         rader = rader[:args.max]
