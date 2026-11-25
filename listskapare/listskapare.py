@@ -228,7 +228,20 @@ def kandidater(soup: BeautifulSoup) -> list[tuple[str, list[str]]]:
     ut = [(namn, unika(v)) for namn, v in ut]
     ut = [(namn, v) for namn, v in ut if len(v) >= 3 and ser_bra_ut(v)]
     ut.sort(key=lambda x: -len(x[1]))
-    return ut
+
+    # 5. Upprepade element med samma klass (kort i rutnät, citat, produktkort …).
+    #    Läggs sist så att tabeller och listor behåller sina nummer.
+    grupper: dict[str, list[str]] = {}
+    for el in soup.find_all(class_=True):
+        if el.name in ("html", "body", "main", "section"):
+            continue
+        nyckel = f"{el.name}.{el.get('class')[0]}"
+        grupper.setdefault(nyckel, []).append(el.get_text(" "))
+    upprepade = [(f'element {k} (--selektor "{k}")', unika(v))
+                 for k, v in grupper.items() if len(v) >= 5]
+    upprepade = [(namn, v) for namn, v in upprepade if len(v) >= 3 and ser_bra_ut(v)]
+    upprepade.sort(key=lambda x: -len(x[1]))
+    return ut + upprepade
 
 
 def tabellkolumner(soup: BeautifulSoup, tabellnr: int, kolumner: list[int],
@@ -372,7 +385,7 @@ def main() -> None:
                 if not kand:
                     sys.exit("Hittade inga listor. Prova --selektor.")
                 if args.visa:
-                    for i, (namn, v) in enumerate(kand[:15], 1):
+                    for i, (namn, v) in enumerate(kand[:20], 1):
                         prov = " | ".join(x if len(x) <= 40 else x[:39] + "…" for x in v[:4])
                         print(f"{i:>2}. {namn} – {len(v)} poster: {prov} …")
                     return

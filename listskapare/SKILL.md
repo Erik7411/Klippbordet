@@ -1,6 +1,6 @@
 ---
 name: listskapare
-description: Ta fram listor från webbsidor och leverera dem som .txt med en post per rad, som underlag till momenten Nämn en, Tidslinjen och Pingpong. Använd så fort Eken skriver /listskapare, ber om att "skrapa", "hämta", "plocka ut" eller "sammanställa" en lista från en webbplats (Wikipedia, IMDb, topplistor, förteckningar), eller ber om en lista med t.ex. alla kommuner, statsministrar, filmer, vinnare eller låtar till Nämn en, Tidslinjen eller Pingpong, även när ingen webbsida nämns. Gäller också listor som är uppdelade på flera sidor, har en "Visa fler"-knapp eller laddar mer när man scrollar, och sidor som blockerar automatiska hämtningar. Skillen tidslinje väljer ut och graderar innehåll; den här tar fram själva råtextlistan.
+description: Gör webblistor till .txt med en post per rad, till Nämn en, Tidslinjen och Pingpong. Använd vid /listskapare eller när Eken vill skrapa, hämta eller sammanställa en lista från en webbsida.
 ---
 
 # Listskapare
