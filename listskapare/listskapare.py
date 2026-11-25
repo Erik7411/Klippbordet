@@ -47,8 +47,7 @@ try:
 except ImportError:  # pragma: no cover
     sys.exit("Saknar beautifulsoup4. Installera med: pip install beautifulsoup4 lxml")
 
-UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
-      "Chrome/124.0 Safari/537.36")
+UA = "Listskapare/1.0 (list tool for research; python-urllib)"
 
 
 # ---------------------------------------------------------------- hämtning
@@ -84,6 +83,8 @@ def hamta(kalla: str, tyst_fel: bool = False) -> tuple[str | None, str]:
     if os.path.exists(kalla):
         with open(kalla, encoding="utf-8", errors="replace") as f:
             return f.read(), ""
+    # Adresser med å/ä/ö (t.ex. Lista_över_…) måste kodas; redan kodade %C3%B6 lämnas orörda
+    kalla = urllib.parse.quote(kalla, safe=":/?&=%#+,;@!$'()*~[]")
     req = urllib.request.Request(kalla, headers={
         "User-Agent": UA, "Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8"})
     try:
@@ -97,9 +98,11 @@ def hamta(kalla: str, tyst_fel: bool = False) -> tuple[str | None, str]:
         if tyst_fel:
             print(f"  slut: {kalla} gav {e}", file=sys.stderr)
             return None, ""
-        sys.exit(f"Kunde inte hämta {kalla}: {e}\n"
-                 "Om sidan blockerar automatiska hämtningar: spara den i webbläsaren "
-                 "och kör skriptet på den sparade filen.")
+        kod = getattr(e, "code", None)
+        sparrad = kod in (401, 403, 429) or "HTTP 202" in str(e)
+        sys.exit(f"Kunde inte hämta {kalla}: {e}" + (
+            "\nSidan verkar spärra automatiska hämtningar. Kringgå inte spärren: använd "
+            "officiell data, bokmärket i den egna webbläsaren eller en annan källa." if sparrad else ""))
 
 
 # ---------------------------------------------------------------- städning

@@ -84,6 +84,16 @@ någon annans server.
 - **Skräp**: rubrikrader, "Totalt", fotnotsrester, tomma rader, dubbletter.
 - **Rimlighet**: titta igenom hela listan efter poster som inte hör dit.
 
+- **Aktualitet**: slutar listan med något som gäller "nu" (sittande statsminister, regerande
+  mästare, senaste vinnare) kan sidan vara inaktuell. Kontrollera dagsläget med en webbsökning om
+  du kan, och säg vad du fann. Kan du inte kontrollera det, säg det.
+- **Återkommande poster**: en tabell har ofta en rad per tillfälle, inte per person eller sak
+  (Branting var statsminister tre gånger). Välj det som passar momentet, för Nämn en oftast en rad
+  per person, och säg vilket du valt och hur många rader det andra valet skulle ge.
+- **Namnform**: i Nämn en ska listan visa vilka svar som godkänns. Står namnen i en lång form
+  ("Falu kommun", "Lindman, Arvid"), säg det och erbjud en kortare form. Gör den inte mekaniskt
+  om det kräver bedömning (Falu → Falun).
+
 Rätta det som går att rätta (fel kandidat, fel kolumn, en rubrikrad som följt med) och kör om.
 
 ### 6. Redovisa
