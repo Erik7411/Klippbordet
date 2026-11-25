@@ -46,6 +46,24 @@ Vissa webbplatser (t.ex. IMDb) stoppar skript. Kringgå inte spärren. Gör i st
    tills alla poster syns innan du sparar.
 3. **En annan källa** med samma lista, t.ex. Wikipedia.
 
+### IMDb-listor direkt från webbläsaren
+
+`webblasarskript/imdb-lista.js` körs i din egen webbläsare på en öppen IMDb-lista. Det klickar
+"50 more" tills allt har laddats och laddar sedan ner en `.txt` med en titel per rad, i formen
+`Titel (år)`. Det väntar 1,5 sekunder mellan klicken.
+
+**Som bokmärke (en gång):** skapa ett nytt bokmärke i webbläsaren och klistra in hela raden i
+`webblasarskript/imdb-lista.bokmarke.txt` som adress.
+
+**Varje gång:** öppna listan, t.ex.
+`https://www.imdb.com/search/title/?groups=top_1000&sort=user_rating,desc`, klicka på bokmärket
+och vänta tills rutan uppe till höger säger "Klart". Filen hamnar bland dina hämtade filer.
+
+Utan bokmärke: tryck F12, välj fliken Console, klistra in innehållet i `imdb-lista.js` och tryck Enter.
+
+Skriptet är testat mot en egen kopia av sidans uppbyggnad, inte mot imdb.com, som blockerar
+hämtningar från den miljö där det skrevs. Om IMDb ändrar sidan kan skriptet behöva justeras.
+
 ## Krav
 
 Python 3.10 eller senare med `beautifulsoup4` och `lxml`:
