@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Miniquiz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Martian+Mono:wght@400;600&display=swap">
+<style>
+/* VOICE arbete: ett verktyg på redaktionen, samma familj som Klippbordet
+   IDEA en kontaktkarta: nio rutor i 16:9 på ett ljusbord, en markerad i taget
+   PICTURE 3×3-rutnätet med de färdiga bilderna, ritade live i full upplösning
+   COLOUR mörkt bord, vit text, blågrön accent; bilderna har egna stilar
+   TYPE Archivo + Martian Mono för nummer
+   LAYOUT laptop: rutnät till vänster, inställningar och vald bild till höger; mobil: rutnät, sedan kontroller */
+:root{
+  --bg:#121516; --panel:#1a1e20; --raise:#232829; --line:#2f3537;
+  --fg:#f3f6f6; --muted:#b3bec0; --accent:#3fb3c2; --accent-ink:#06282d; --warn:#e6b450;
+  --side:#14292c; --side-raise:#1b363a; --side-line:#2b4a4f;
+  --f-ui:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-tc:"Martian Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){ :root:not([data-theme="dark"]){
+  --bg:#eef1f1; --panel:#ffffff; --raise:#f4f6f6; --line:#d3dadb;
+  --fg:#0b0f10; --muted:#3a4446; --accent:#0d6f7e; --accent-ink:#ffffff; --warn:#8a5d00;
+  --side:#e2eff0; --side-raise:#f3f9f9; --side-line:#bdd8db; color-scheme:light } }
+:root[data-theme="light"]{
+  --bg:#eef1f1; --panel:#ffffff; --raise:#f4f6f6; --line:#d3dadb;
+  --fg:#0b0f10; --muted:#3a4446; --accent:#0d6f7e; --accent-ink:#ffffff; --warn:#8a5d00;
+  --side:#e2eff0; --side-raise:#f3f9f9; --side-line:#bdd8db; color-scheme:light }
+*{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.45 var(--f-ui);padding-block:14px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));overflow-x:clip}
+.wrap{max-width:1500px;margin:0 auto;display:grid;gap:14px}
+header.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px}
+h1{margin:0;font-size:32px;line-height:1.05;letter-spacing:-.02em;font-weight:800}
+h1 small{display:block;font-size:13px;font-weight:500;color:var(--muted);letter-spacing:0;margin-top:4px}
+.grow{flex:1 1 auto}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:14px;align-items:start}
+@media (max-width:1050px){.main{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;display:grid;gap:12px}
+aside.side{--panel:var(--side);--raise:var(--side-raise);--line:var(--side-line);display:grid;gap:14px}
+.panel h2{margin:0;font-size:15px;font-weight:700}
+.grid9{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:520px){.grid9{gap:6px}}
+.tile{position:relative;padding:0;border:2px solid transparent;border-radius:6px;background:var(--raise);cursor:pointer;aspect-ratio:16/9;overflow:hidden;display:block;width:100%}
+.tile canvas{display:block;width:100%;height:100%}
+.tile[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+.tile .no{position:absolute;left:6px;top:6px;font:600 12px var(--f-tc);background:rgba(0,0,0,.62);color:#fff;border-radius:4px;padding:2px 6px}
+.tile .cap{position:absolute;left:0;right:0;bottom:0;font-size:12px;font-weight:600;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.7));padding:14px 8px 5px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .warn{position:absolute;right:6px;top:6px;font-size:12px;font-weight:700;background:var(--warn);color:#1b1300;border-radius:4px;padding:1px 6px}
+.field{display:grid;gap:5px}
+.field label,.lab{font-size:13px;font-weight:600;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+select,input[type=text],input[type=number]{font:16px var(--f-ui);color:var(--fg);background:var(--raise);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;min-height:40px}
+input[type=color]{width:44px;height:40px;border:1px solid var(--line);border-radius:6px;background:var(--raise);padding:3px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.check{display:flex;gap:8px;align-items:center;font-size:14px;font-weight:500;cursor:pointer}
+.check input{width:18px;height:18px;accent-color:var(--accent)}
+button{font:600 14px var(--f-ui);border-radius:6px;border:1px solid var(--line);background:var(--raise);color:var(--fg);padding:9px 14px;min-height:40px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:focus-visible,select:focus-visible,input:focus-visible,.tile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+.seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:transparent;font-size:13px;padding:8px 6px;line-height:1.2}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.note{font-size:13px;font-weight:500;color:var(--muted);margin:0}
+.note.warn{color:var(--warn)}
+.big{user-select:none;-webkit-user-select:none;position:relative;aspect-ratio:16/9;border-radius:6px;overflow:hidden;background:var(--raise);touch-action:none}
+.big canvas{display:block;width:100%;height:100%}
+.status{font:12px var(--f-tc);color:var(--muted);overflow-wrap:anywhere}
+details summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--muted)}
+.drop{border:2px dashed var(--line);border-radius:8px;padding:14px;text-align:center;color:var(--muted);font-weight:500}
+.drop.on{border-color:var(--accent);color:var(--fg)}
+textarea{font:13px/1.5 var(--f-tc);width:100%;min-height:150px;color:var(--fg);background:var(--raise);border:1px solid var(--line);border-radius:6px;padding:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Miniquiz<small>Nio bilder i 16:9 · 1920 × 1080 eller 3840 × 2160</small></h1>
+    <div class="grow"></div>
+    <div class="row">
+      <div class="seg" style="grid-template-columns:repeat(2,minmax(0,1fr));min-width:180px" role="group" aria-label="Visa">
+        <button id="visaFraga" aria-pressed="true">Fråga</button><button id="visaSvar" aria-pressed="false">Svar</button>
+      </div>
+      <button id="slumpa">Slumpa nio</button>
+      <button id="exportera" class="primary">Ladda ner zip</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <section class="panel" aria-label="De nio bilderna">
+      <div class="grid9" id="grid"></div>
+      <p class="status" id="status"></p>
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <h2>Tema</h2>
+        <div class="seg" role="group" aria-label="Tema">
+          <button data-tema="regioner" aria-pressed="true">Regioner i ett land</button>
+          <button data-tema="lander" aria-pressed="false">Länder i en världsdel</button>
+          <button data-tema="egna" aria-pressed="false">Egna bilder</button>
+        </div>
+
+        <div id="regionerInst" class="field" style="gap:10px">
+          <div class="field"><label for="land">Land</label><select id="land"></select></div>
+          <div class="field" id="nivaFalt"><label for="niva">Indelning</label><select id="niva"></select></div>
+          <label class="check"><input type="checkbox" id="avlagsna"> Ta med avlägsna öar och territorier</label>
+          <p class="note warn" id="indelningsvarning"></p>
+        </div>
+
+        <div id="landerInst" class="field" hidden>
+          <label for="varldsdel">Världsdel</label><select id="varldsdel"></select>
+        </div>
+
+        <div id="egnaInst" hidden>
+          <div class="drop" id="drop">Släpp upp till nio bilder här, eller <label style="color:var(--accent);cursor:pointer;text-decoration:underline">välj filer<input type="file" id="filer" accept="image/*" multiple hidden></label>. De fyller rutorna i tur och ordning från den valda.</div>
+        </div>
+
+        <div class="field"><label for="fraga">Fråga</label><input type="text" id="fraga" value="Vilken är delstaten?"></div>
+        <label class="check"><input type="checkbox" id="fragaPaBild"> Skriv frågan på bilderna</label>
+        <label class="check"><input type="checkbox" id="nummer"> Nummer 1–9 i hörnet</label>
+      </section>
+
+      <section class="panel" aria-label="Vald bild">
+        <h2 id="valdRubrik">Bild 1</h2>
+        <div class="big" id="bigWrap"><canvas id="big" width="1920" height="1080"></canvas></div>
+        <div id="valKarta" class="field" style="gap:10px">
+          <div class="field"><label for="objekt" id="objektEtikett">Markerad region</label><select id="objekt"></select></div>
+        </div>
+        <div id="valEgen" class="field" hidden style="gap:10px">
+          <p class="note">Dra i bilden för att flytta utsnittet.</p>
+          <div class="field"><label for="zoom">Zoom</label><input type="range" id="zoom" min="1" max="4" step="0.01" value="1"></div>
+          <div class="row"><label class="check" style="flex:1"><input type="file" id="ersatt" accept="image/*" hidden><button type="button" id="ersattKnapp">Byt bild</button></label><button type="button" id="tomRuta">Töm rutan</button></div>
+        </div>
+        <div class="field"><label for="svar">Rätt svar (visas på svarsbilden)</label><input type="text" id="svar"></div>
+        <div class="row">
+          <button type="button" id="forra">← Förra</button>
+          <button type="button" id="nasta">Nästa →</button>
+          <span class="grow"></span>
+          <button type="button" id="slumpaEn">Slumpa den här</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Utseende</h2>
+        <div class="row2">
+          <div class="field"><label for="stil">Stil</label><select id="stil"><option value="ljus">Ljus</option><option value="mork">Mörk</option><option value="papper">Papper</option></select></div>
+          <div class="field"><label for="projektion">Projektion</label><select id="projektion"><option value="auto">Automatisk</option><option value="mercator">Mercator</option></select></div>
+        </div>
+        <div class="row">
+          <label class="lab" for="farg">Markering</label><input type="color" id="farg" value="#e8412c">
+          <span class="grow"></span>
+          <label class="check"><input type="checkbox" id="grannar" checked> Grannländer</label>
+        </div>
+        <div class="field"><label for="upplosning">Exportstorlek</label><select id="upplosning"><option value="1">1920 × 1080 (Full HD)</option><option value="2">3840 × 2160 (4K)</option></select></div>
+        <label class="check"><input type="checkbox" id="medSvar" checked> Ta med svarsbilder och svarslista i zip-filen</label>
+      </section>
+
+      <section class="panel">
+        <details>
+          <summary>Svarslista och källa</summary>
+          <div class="field" style="margin-top:10px">
+            <textarea id="lista" readonly></textarea>
+            <button type="button" id="kopiera">Kopiera listan</button>
+            <p class="note">Kartor: <a href="https://www.naturalearthdata.com/" style="color:var(--accent)">Natural Earth</a>, public domain (admin-0 1:50m, admin-1 1:10m, version 5.2.0-pre). Indelningen och de svenska namnen kan vara inaktuella eller felaktiga. Kontrollera dem innan sändning.</p>
+          </div>
+        </details>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="kartdata.js"></script>
+<script>
+{
+const W = 1920, H = 1080;
+const $ = id => document.getElementById(id);
+const KM = 6371;
+
+const STILAR = {
+  ljus:   { hav:'#cfe3ee', grann:'#eceae4', grannKant:'#b9b6ad', land:'#ffffff', kant:'#8c96a0', yttre:'#3d4a55', text:'#10171d', band:'rgba(255,255,255,.92)' },
+  mork:   { hav:'#0d2233', grann:'#1d3344', grannKant:'#2f4b5f', land:'#e9eef2', kant:'#7d8b97', yttre:'#0a1620', text:'#ffffff', band:'rgba(6,18,28,.86)' },
+  papper: { hav:'#e8e1d2', grann:'#d9d1bf', grannKant:'#b9ae96', land:'#f7f3ea', kant:'#9b8f78', yttre:'#4a3f2c', text:'#2a2216', band:'rgba(247,243,234,.94)' },
+};
+
+const VARLDSDELAR = [
+  { id:'europa', namn:'Europa', box:[-25,34,45,71.5] },
+  { id:'norden', namn:'Norden och Baltikum', box:[3,53.5,32,71.3] },
+  { id:'afrika', namn:'Afrika', box:[-19,-36,53,38.5] },
+  { id:'asien', namn:'Asien', box:[25,-11,150,56] },
+  { id:'mellanostern', namn:'Mellanöstern', box:[25,12,63,42] },
+  { id:'nordamerika', namn:'Nordamerika', box:[-170,5,-50,75] },
+  { id:'mellanamerika', namn:'Centralamerika och Karibien', box:[-118,6,-59,33] },
+  { id:'sydamerika', namn:'Sydamerika', box:[-83,-56,-33,13.5] },
+  { id:'oceanien', namn:'Oceanien', box:[110,-48,180,2] },
+  { id:'varlden', namn:'Hela världen', box:null },
+];
+
+const FRAGOR = { regioner:'Vilken är delstaten?', lander:'Vilket är landet?', egna:'Vad är det här?' };
+
+// ---------- Data ----------
+const DATA = window.MQ_DATA;
+const lander = topojson.feature(DATA.lander, DATA.lander.objects.countries50).features;
+const landNamn = {};
+lander.forEach(f => { landNamn[f.properties.a] = f.properties.n || f.properties.e; });
+const landerYtter = topojson.mesh(DATA.lander, DATA.lander.objects.countries50, (a, b) => a !== b);
+
+function delar(geom) {
+  if (!geom) return [];
+  if (geom.type === 'Polygon') return [geom.coordinates];
+  if (geom.type === 'MultiPolygon') return geom.coordinates;
+  return [];
+}
+function huvuddelar(features, helhet) {
+  // Avgör vad som är landets huvuddel, så att avlägsna öar och territorier kan lämnas utanför utsnittet.
+  // helhet: hela landet sammanslaget (en MultiPolygon), så att största delen är fastlandet och inte en enskild region.
+  const ytor = delar(helhet).map(p => { const g = { type:'Polygon', coordinates:p }; return { g, area:d3.geoArea(g), c:d3.geoCentroid(g) }; });
+  if (!ytor.length) return { delar:[], index:new Set() };
+  const storst = ytor.reduce((a, b) => b.area > a.area ? b : a);
+  const radieKm = Math.sqrt(storst.area * KM * KM / Math.PI);
+  const grans = Math.max(400, radieKm * 6);
+  const nara = d => d.area > storst.area * 0.2 || d3.geoDistance(d.c, storst.c) * KM < grans;
+  const kvar = ytor.filter(nara);
+  const index = new Set();
+  features.forEach((f, i) => {
+    if (delar(f.geometry).some(p => { const g = { type:'Polygon', coordinates:p }; return nara({ area:d3.geoArea(g), c:d3.geoCentroid(g) }); })) index.add(i);
+  });
+  return { delar:kvar, index };
+}
+
+const landCache = {};
+function landData(a) {
+  if (landCache[a]) return landCache[a];
+  const topo = DATA.regioner[a];
+  const obj = topo.objects.r;
+  const feats = topojson.feature(topo, obj).features;
+  const harRegion = new Set(obj.geometries.map(g => g.properties.r).filter(Boolean)).size > 1;
+  const res = { topo, obj, feats, harRegion, niva:{} };
+  landCache[a] = res;
+  return res;
+}
+function nivaData(a, niva) {
+  const L = landData(a);
+  if (L.niva[niva]) return L.niva[niva];
+  let enheter, inre;
+  if (niva === 'region' && L.harRegion) {
+    const grupper = d3.group(L.obj.geometries.filter(g => g.properties.r), g => g.properties.r);
+    enheter = [...grupper].map(([r, gs]) => ({ type:'Feature', properties:{ n:r, o:r }, geometry:topojson.merge(L.topo, gs) }));
+    inre = topojson.mesh(L.topo, L.obj, (x, y) => x !== y && x.properties.r !== y.properties.r);
+  } else {
+    enheter = L.feats;
+    inre = topojson.mesh(L.topo, L.obj, (x, y) => x !== y);
+  }
+  const yttre = topojson.mesh(L.topo, L.obj, (x, y) => x === y);
+  const hd = huvuddelar(enheter, topojson.merge(L.topo, L.obj.geometries));
+  const res = { enheter, inre, yttre, hd };
+  L.niva[niva] = res;
+  return res;
+}
+
+// ---------- Tillstånd ----------
+const S = {
+  tema:'regioner', land:'USA', niva:'admin', varldsdel:'europa',
+  fraga:FRAGOR.regioner, fragaPaBild:false, nummer:false, visa:'q',
+  stil:'ljus', farg:'#e8412c', grannar:true, projektion:'auto', avlagsna:false,
+  vald:0, rutor:{ regioner:[], lander:[], egna:[] },
+};
+const tomma = () => Array.from({ length:9 }, () => null);
+S.rutor.regioner = tomma(); S.rutor.lander = tomma(); S.rutor.egna = tomma();
+
+function valbaraRegioner() {
+  const N = nivaData(S.land, S.niva);
+  return N.enheter.map((f, i) => ({ i, f, namn:(f.properties.n || f.properties.o || '').trim() }))
+    .filter(x => x.f.geometry && (S.avlagsna || N.hd.index.has(x.i)) && x.namn);
+}
+function iBox(c, box) {
+  if (!box) return true;
+  return c[0] >= box[0] && c[0] <= box[2] && c[1] >= box[1] && c[1] <= box[3];
+}
+const landerHuvud = new Map();
+function landHuvudpunkt(f) {
+  if (!landerHuvud.has(f)) {
+    const ds = delar(f.geometry).map(p => ({ type:'Polygon', coordinates:p }));
+    const storst = ds.reduce((a, b) => d3.geoArea(b) > d3.geoArea(a) ? b : a, ds[0]);
+    landerHuvud.set(f, storst ? d3.geoCentroid(storst) : [0, 0]);
+  }
+  return landerHuvud.get(f);
+}
+function valbaraLander() {
+  const vd = VARLDSDELAR.find(v => v.id === S.varldsdel);
+  return lander.map((f, i) => ({ i, f, namn:f.properties.n || f.properties.e }))
+    .filter(x => x.f.geometry && x.f.properties.y !== 'Lease' && iBox(landHuvudpunkt(x.f), vd.box) && x.f.properties.k !== 'Antarctica')
+    .sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+}
+function valbara() { return S.tema === 'regioner' ? valbaraRegioner() : valbaraLander(); }
+
+function slumpaAlla() {
+  if (S.tema === 'egna') return;
+  const v = d3.shuffle(valbara().slice());
+  S.rutor[S.tema] = tomma().map((_, k) => v.length ? { i:v[k % v.length].i, svar:v[k % v.length].namn } : null);
+}
+function slumpaEn(k) {
+  if (S.tema === 'egna') return;
+  const upptagna = new Set(S.rutor[S.tema].filter(Boolean).map(r => r.i));
+  const v = valbara().filter(x => !upptagna.has(x.i));
+  const x = v.length ? v[Math.floor(Math.random() * v.length)] : null;
+  if (x) S.rutor[S.tema][k] = { i:x.i, svar:x.namn };
+}
+
+// ---------- Projektion ----------
+function boxPolygon(b) {
+  const [x0, y0, x1, y1] = b, pts = [];
+  for (let x = x0; x <= x1; x += (x1 - x0) / 20) pts.push([x, y0]);
+  for (let y = y0; y <= y1; y += (y1 - y0) / 20) pts.push([x1, y]);
+  for (let x = x1; x >= x0; x -= (x1 - x0) / 20) pts.push([x, y1]);
+  for (let y = y1; y >= y0; y -= (y1 - y0) / 20) pts.push([x0, y]);
+  pts.push(pts[0]);
+  return { type:'Polygon', coordinates:[pts.reverse()] };
+}
+function gorProjektion(maal, ram) {
+  // maal: GeoJSON att passa in. ram: [[x0,y0],[x1,y1]] i bildens koordinater.
+  let p;
+  if (S.projektion === 'mercator') {
+    p = d3.geoMercator().rotate([-d3.geoCentroid(maal)[0], 0]);
+  } else if (S.tema === 'regioner' && S.land === 'USA' && !S.avlagsnaUSA) {
+    p = d3.geoAlbersUsa(); p.arUsa = true;
+  } else if (S.tema === 'lander' && S.varldsdel === 'varlden') {
+    p = d3.geoEqualEarth().rotate([-10, 0]);
+  } else {
+    const c = d3.geoCentroid(maal);
+    const b = d3.geoBounds(maal);
+    let bredd = b[1][0] - b[0][0]; if (bredd < 0) bredd += 360;
+    const hojd = b[1][1] - b[0][1];
+    if (bredd > 40 && Math.abs(c[1]) > 15) {
+      const y0 = b[0][1] + hojd / 6, y1 = b[1][1] - hojd / 6;
+      p = d3.geoConicEqualArea().rotate([-c[0], 0]).parallels([y0, y1]);
+    } else {
+      p = d3.geoAzimuthalEqualArea().rotate([-c[0], -c[1]]);
+    }
+  }
+  p.fitExtent(ram, maal);
+  if (p.precision) p.precision(0.3);
+  return p;
+}
+
+// ---------- Ritning ----------
+function stil() { return STILAR[S.stil]; }
+function ramFor(harText) {
+  const top = harText ? 150 : 70, sid = 90, bott = 70;
+  return [[sid, top], [W - sid, H - bott]];
+}
+
+const projCache = new Map();
+function kartScen() {
+  // Samma utsnitt för alla nio bilder i temat, så att de ser likadana ut.
+  const nyckel = [S.tema, S.land, S.niva, S.varldsdel, S.projektion, S.avlagsna, S.fragaPaBild].join('|');
+  if (projCache.has(nyckel)) return projCache.get(nyckel);
+  let scen;
+  const ram = ramFor(S.fragaPaBild);
+  if (S.tema === 'regioner') {
+    const N = nivaData(S.land, S.niva);
+    const delarAttPassa = S.avlagsna ? N.enheter.flatMap(f => delar(f.geometry)) : N.hd.delar.map(d => d.g.coordinates);
+    const maal = { type:'MultiPolygon', coordinates:delarAttPassa };
+    S.avlagsnaUSA = S.avlagsna;
+    const proj = gorProjektion(maal, ram);
+    scen = { proj, enheter:N.enheter, inre:N.inre, yttre:N.yttre, landKod:S.land };
+  } else {
+    const vd = VARLDSDELAR.find(v => v.id === S.varldsdel);
+    const maal = vd.box ? boxPolygon(vd.box) : { type:'Sphere' };
+    const proj = gorProjektion(maal, vd.box ? [[0, ram[0][1] - 40], [W, H]] : ram);
+    scen = { proj, enheter:lander };
+  }
+  projCache.set(nyckel, scen);
+  return scen;
+}
+
+function ritaRuta(ctx, k, typ) {
+  const st = stil();
+  ctx.save();
+  ctx.fillStyle = st.hav; ctx.fillRect(0, 0, W, H);
+  const r = S.rutor[S.tema][k];
+  if (S.tema === 'egna') ritaEgen(ctx, r);
+  else ritaKarta(ctx, r);
+  if (S.fragaPaBild && S.fraga.trim()) ritaFraga(ctx, S.fraga.trim());
+  if (S.nummer) ritaNummer(ctx, k + 1);
+  if (typ === 'a' && r && r.svar) ritaSvar(ctx, r.svar);
+  ctx.restore();
+}
+
+function ritaKarta(ctx, r) {
+  const st = stil();
+  const scen = kartScen();
+  const path = d3.geoPath(scen.proj, ctx);
+  const fyll = (g, f) => { ctx.beginPath(); path(g); ctx.fillStyle = f; ctx.fill(); };
+  const linje = (g, c, w) => { ctx.beginPath(); path(g); ctx.strokeStyle = c; ctx.lineWidth = w; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke(); };
+
+  if (S.tema === 'regioner') {
+    if (S.grannar && !scen.proj.arUsa) {
+      lander.forEach(f => { if (f.properties.a !== scen.landKod) fyll(f, st.grann); });
+      linje(landerYtter, st.grannKant, 1.6);
+    }
+    scen.enheter.forEach(f => fyll(f, st.land));
+    const h = r && scen.enheter[r.i];
+    if (h) fyll(h, S.farg);
+    linje(scen.inre, st.kant, 2);
+    linje(scen.yttre, st.yttre, 3.5);
+    if (h) markeraLiten(ctx, path, h);
+  } else {
+    const h = r && lander[r.i];
+    lander.forEach(f => fyll(f, f === h ? S.farg : (S.grannar || iBox(landHuvudpunkt(f), (VARLDSDELAR.find(v => v.id === S.varldsdel) || {}).box) ? st.land : st.grann)));
+    linje(landerYtter, st.kant, 1.8);
+    if (S.varldsdel === 'varlden') linje({ type:'Sphere' }, st.yttre, 2);
+    if (h) markeraLiten(ctx, path, h);
+  }
+}
+
+function markeraLiten(ctx, path, f) {
+  const b = path.bounds(f);
+  if (!isFinite(b[0][0])) return;
+  const w = b[1][0] - b[0][0], h = b[1][1] - b[0][1];
+  if (Math.max(w, h) >= 34) return;
+  const cx = (b[0][0] + b[1][0]) / 2, cy = (b[0][1] + b[1][1]) / 2;
+  const rad = Math.max(w, h) / 2 + 30;
+  ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 11; ctx.stroke();
+  ctx.strokeStyle = S.farg; ctx.lineWidth = 6; ctx.stroke();
+}
+
+function ritaBand(ctx, text, y, storlek) {
+  const st = stil();
+  ctx.font = `800 ${storlek}px Archivo, system-ui, sans-serif`;
+  let s = storlek;
+  while (ctx.measureText(text).width > W - 240 && s > 30) { s -= 4; ctx.font = `800 ${s}px Archivo, system-ui, sans-serif`; }
+  const tw = ctx.measureText(text).width, ph = s * 0.55, bh = s * 1.5;
+  ctx.fillStyle = st.band;
+  rundRekt(ctx, W / 2 - tw / 2 - ph * 1.6, y - bh / 2, tw + ph * 3.2, bh, 18); ctx.fill();
+  ctx.strokeStyle = st.kant; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = st.text; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, W / 2, y + s * 0.04);
+}
+function ritaFraga(ctx, text) { ritaBand(ctx, text, 78, 64); }
+function ritaSvar(ctx, text) {
+  ctx.font = '800 84px Archivo, system-ui, sans-serif';
+  let s = 84;
+  while (ctx.measureText(text).width > W - 260 && s > 34) { s -= 4; ctx.font = `800 ${s}px Archivo, system-ui, sans-serif`; }
+  const tw = ctx.measureText(text).width, bh = s * 1.55, y = H - 50 - bh / 2;
+  ctx.fillStyle = S.farg;
+  rundRekt(ctx, W / 2 - tw / 2 - s * 0.7, y - bh / 2, tw + s * 1.4, bh, 20); ctx.fill();
+  ctx.fillStyle = kontrast(S.farg); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, W / 2, y + s * 0.04);
+}
+function ritaNummer(ctx, n) {
+  const st = stil();
+  ctx.fillStyle = st.band; ctx.beginPath(); ctx.arc(86, 86, 50, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = st.kant; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = st.text; ctx.font = '800 58px Archivo, system-ui, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(n), 86, 89);
+}
+function rundRekt(ctx, x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function kontrast(hex) {
+  const n = parseInt(hex.slice(1), 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
+  const l = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return l > 0.6 ? '#0b0f10' : '#ffffff';
+}
+
+function ritaEgen(ctx, r) {
+  const st = stil();
+  if (!r || !r.bild) {
+    ctx.fillStyle = st.grann; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = st.kant; ctx.font = '600 56px Archivo, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('Ingen bild', W / 2, H / 2);
+    return;
+  }
+  const img = r.bild, iw = img.naturalWidth, ih = img.naturalHeight;
+  const bas = Math.max(W / iw, H / ih), sk = bas * r.zoom;
+  const dw = iw * sk, dh = ih * sk;
+  const maxX = (dw - W) / 2, maxY = (dh - H) / 2;
+  r.x = Math.max(-1, Math.min(1, r.x)); r.y = Math.max(-1, Math.min(1, r.y));
+  ctx.drawImage(img, (W - dw) / 2 + r.x * maxX, (H - dh) / 2 + r.y * maxY, dw, dh);
+}
+
+// ---------- Gränssnitt ----------
+const grid = $('grid');
+const tiles = [];
+for (let k = 0; k < 9; k++) {
+  const b = document.createElement('button');
+  b.className = 'tile'; b.type = 'button';
+  b.innerHTML = `<canvas width="640" height="360"></canvas><span class="no">${k + 1}</span><span class="cap"></span><span class="warn" hidden>Dubblett</span>`;
+  b.addEventListener('click', () => { S.vald = k; uppdateraVal(); ritaAlla(); });
+  grid.appendChild(b); tiles.push(b);
+}
+
+function ritaPa(canvas, k, typ) {
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+  ritaRuta(ctx, k, typ);
+}
+function ritaAlla() {
+  const rutor = S.rutor[S.tema];
+  const antal = d3.rollup(rutor.filter(Boolean).filter(r => r.i != null), v => v.length, r => r.i);
+  tiles.forEach((t, k) => {
+    ritaPa(t.querySelector('canvas'), k, S.visa);
+    const r = rutor[k];
+    t.setAttribute('aria-pressed', String(k === S.vald));
+    t.querySelector('.cap').textContent = r && r.svar ? r.svar : '';
+    t.querySelector('.cap').hidden = !(r && r.svar);
+    t.querySelector('.warn').hidden = !(r && r.i != null && antal.get(r.i) > 1);
+    t.setAttribute('aria-label', `Bild ${k + 1}${r && r.svar ? ': ' + r.svar : ''}`);
+  });
+  ritaPa($('big'), S.vald, S.visa);
+  uppdateraLista();
+}
+
+function fyllLander() {
+  const sel = $('land');
+  const koder = Object.keys(DATA.regioner).filter(a => DATA.regioner[a].objects.r.geometries.length >= 2 && landNamn[a]);
+  koder.sort((a, b) => landNamn[a].localeCompare(landNamn[b], 'sv'));
+  sel.innerHTML = koder.map(a => `<option value="${a}">${esc(landNamn[a])} (${DATA.regioner[a].objects.r.geometries.length})</option>`).join('');
+  sel.value = S.land;
+  $('varldsdel').innerHTML = VARLDSDELAR.map(v => `<option value="${v.id}">${esc(v.namn)}</option>`).join('');
+  $('varldsdel').value = S.varldsdel;
+}
+function fyllNiva() {
+  const L = landData(S.land);
+  const n1 = L.obj.geometries.length;
+  const n2 = L.harRegion ? new Set(L.obj.geometries.map(g => g.properties.r).filter(Boolean)).size : 0;
+  $('niva').innerHTML = `<option value="admin">Första nivån (${n1})</option>` + (L.harRegion ? `<option value="region">Större regioner (${n2})</option>` : '');
+  if (!L.harRegion) S.niva = 'admin';
+  $('niva').value = S.niva;
+  $('nivaFalt').hidden = !L.harRegion;
+}
+function fyllObjekt() {
+  const sel = $('objekt');
+  const v = S.tema === 'regioner' ? valbaraRegioner().sort((a, b) => a.namn.localeCompare(b.namn, 'sv')) : valbaraLander();
+  sel.innerHTML = '<option value="">– ingen –</option>' + v.map(x => `<option value="${x.i}">${esc(x.namn)}</option>`).join('');
+  $('objektEtikett').textContent = S.tema === 'regioner' ? 'Markerad region' : 'Markerat land';
+  const n = v.length;
+  let varning = '';
+  if (S.tema === 'regioner') {
+    if (n < 9) varning = `Bara ${n} regioner att välja bland, så några kommer igen.`;
+    if (S.land === 'NOR') varning = 'Natural Earth visar Norges fylken före reformen 2020. Norge har haft 15 fylken sedan 2024.';
+  }
+  $('indelningsvarning').textContent = varning;
+  $('indelningsvarning').hidden = !varning;
+}
+function uppdateraVal() {
+  const r = S.rutor[S.tema][S.vald];
+  $('valdRubrik').textContent = `Bild ${S.vald + 1}`;
+  $('valKarta').hidden = S.tema === 'egna';
+  $('valEgen').hidden = S.tema !== 'egna';
+  $('objekt').value = r && r.i != null ? String(r.i) : '';
+  $('svar').value = r && r.svar ? r.svar : '';
+  $('zoom').value = r && r.zoom ? r.zoom : 1;
+}
+function uppdateraTema() {
+  document.querySelectorAll('[data-tema]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tema === S.tema)));
+  $('regionerInst').hidden = S.tema !== 'regioner';
+  $('landerInst').hidden = S.tema !== 'lander';
+  $('egnaInst').hidden = S.tema !== 'egna';
+  $('projektion').disabled = S.tema === 'egna';
+  $('grannar').disabled = S.tema === 'egna';
+  $('slumpa').hidden = S.tema === 'egna';
+  $('slumpaEn').hidden = S.tema === 'egna';
+}
+function uppdateraLista() {
+  const rader = S.rutor[S.tema].map((r, k) => `${k + 1}. ${r && r.svar ? r.svar : '–'}`);
+  const rubrik = S.fraga.trim() + (S.tema === 'regioner' ? ` (${landNamn[S.land]})` : S.tema === 'lander' ? ` (${VARLDSDELAR.find(v => v.id === S.varldsdel).namn})` : '');
+  $('lista').value = rubrik + '\n' + rader.join('\n');
+  const dubbl = new Set(), sedda = new Set();
+  S.rutor[S.tema].forEach(r => { if (r && r.i != null) { if (sedda.has(r.i)) dubbl.add(r.svar); sedda.add(r.i); } });
+  const tomma = S.rutor[S.tema].filter(r => !r || (S.tema === 'egna' ? !r.bild : r.i == null)).length;
+  const delar = [];
+  if (tomma) delar.push(`${tomma} tomma rutor`);
+  if (dubbl.size) delar.push(`dubbletter: ${[...dubbl].join(', ')}`);
+  $('status').textContent = delar.length ? delar.join(' · ') : 'Nio bilder klara.';
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
+
+function nyttUrval() { projCache.clear(); fyllObjekt(); slumpaAlla(); uppdateraVal(); ritaAlla(); }
+
+// Händelser
+document.querySelectorAll('[data-tema]').forEach(b => b.addEventListener('click', () => {
+  const gammal = S.tema;
+  S.tema = b.dataset.tema;
+  if (S.fraga === FRAGOR[gammal] || !S.fraga.trim()) { S.fraga = FRAGOR[S.tema]; $('fraga').value = S.fraga; }
+  uppdateraTema();
+  if (S.tema !== 'egna') { fyllObjekt(); if (!S.rutor[S.tema].some(Boolean)) slumpaAlla(); }
+  uppdateraVal(); ritaAlla();
+}));
+$('land').addEventListener('change', e => { S.land = e.target.value; fyllNiva(); nyttUrval(); });
+$('niva').addEventListener('change', e => { S.niva = e.target.value; nyttUrval(); });
+$('avlagsna').addEventListener('change', e => { S.avlagsna = e.target.checked; projCache.clear(); fyllObjekt(); ritaAlla(); });
+$('varldsdel').addEventListener('change', e => { S.varldsdel = e.target.value; nyttUrval(); });
+$('fraga').addEventListener('input', e => { S.fraga = e.target.value; ritaAlla(); });
+$('fragaPaBild').addEventListener('change', e => { S.fragaPaBild = e.target.checked; projCache.clear(); ritaAlla(); });
+$('nummer').addEventListener('change', e => { S.nummer = e.target.checked; ritaAlla(); });
+$('stil').addEventListener('change', e => { S.stil = e.target.value; ritaAlla(); });
+$('farg').addEventListener('input', e => { S.farg = e.target.value; ritaAlla(); });
+$('grannar').addEventListener('change', e => { S.grannar = e.target.checked; ritaAlla(); });
+$('projektion').addEventListener('change', e => { S.projektion = e.target.value; projCache.clear(); ritaAlla(); });
+$('visaFraga').addEventListener('click', () => { S.visa = 'q'; $('visaFraga').setAttribute('aria-pressed', 'true'); $('visaSvar').setAttribute('aria-pressed', 'false'); ritaAlla(); });
+$('visaSvar').addEventListener('click', () => { S.visa = 'a'; $('visaSvar').setAttribute('aria-pressed', 'true'); $('visaFraga').setAttribute('aria-pressed', 'false'); ritaAlla(); });
+$('slumpa').addEventListener('click', () => { slumpaAlla(); uppdateraVal(); ritaAlla(); });
+$('slumpaEn').addEventListener('click', () => { slumpaEn(S.vald); uppdateraVal(); ritaAlla(); });
+$('forra').addEventListener('click', () => { S.vald = (S.vald + 8) % 9; uppdateraVal(); ritaAlla(); });
+$('nasta').addEventListener('click', () => { S.vald = (S.vald + 1) % 9; uppdateraVal(); ritaAlla(); });
+$('objekt').addEventListener('change', e => {
+  const v = e.target.value;
+  if (v === '') S.rutor[S.tema][S.vald] = null;
+  else {
+    const i = +v, x = valbara().find(y => y.i === i);
+    S.rutor[S.tema][S.vald] = { i, svar:x ? x.namn : '' };
+  }
+  uppdateraVal(); ritaAlla();
+});
+$('svar').addEventListener('input', e => {
+  const r = S.rutor[S.tema][S.vald] || (S.rutor[S.tema][S.vald] = { i:null, svar:'' });
+  r.svar = e.target.value; ritaAlla();
+});
+$('kopiera').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('lista').value); $('kopiera').textContent = 'Kopierad'; }
+  catch { $('lista').select(); $('kopiera').textContent = 'Markerad, kopiera med Ctrl+C'; }
+  setTimeout(() => { $('kopiera').textContent = 'Kopiera listan'; }, 2000);
+});
+
+// Egna bilder
+function lasBild(fil) {
+  return new Promise((ok, fel) => {
+    const url = URL.createObjectURL(fil);
+    const img = new Image();
+    img.onload = () => ok(img); img.onerror = fel; img.src = url;
+  });
+}
+async function laggTill(filer, start) {
+  const bilder = [...filer].filter(f => f.type.startsWith('image/'));
+  let k = start;
+  for (const f of bilder) {
+    if (k > 8) break;
+    try {
+      const img = await lasBild(f);
+      const gammal = S.rutor.egna[k];
+      S.rutor.egna[k] = { bild:img, zoom:1, x:0, y:0, svar:gammal && gammal.svar ? gammal.svar : f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ') };
+      k++;
+    } catch { $('status').textContent = `Kunde inte läsa ${f.name}.`; }
+  }
+  uppdateraVal(); ritaAlla();
+}
+$('filer').addEventListener('change', e => { laggTill(e.target.files, S.vald); e.target.value = ''; });
+$('ersattKnapp').addEventListener('click', () => $('ersatt').click());
+$('ersatt').addEventListener('change', e => { laggTill(e.target.files, S.vald); e.target.value = ''; });
+$('tomRuta').addEventListener('click', () => { S.rutor.egna[S.vald] = null; uppdateraVal(); ritaAlla(); });
+const drop = $('drop');
+['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('on'); }));
+['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('on'); }));
+drop.addEventListener('drop', e => laggTill(e.dataTransfer.files, S.vald));
+$('bigWrap').addEventListener('dragover', e => { if (S.tema === 'egna') e.preventDefault(); });
+$('bigWrap').addEventListener('drop', e => { if (S.tema === 'egna') { e.preventDefault(); laggTill(e.dataTransfer.files, S.vald); } });
+$('zoom').addEventListener('input', e => { const r = S.rutor.egna[S.vald]; if (r && r.bild) { r.zoom = +e.target.value; ritaAlla(); } });
+{
+  let drag = null;
+  const big = $('bigWrap');
+  big.addEventListener('pointerdown', e => {
+    const r = S.rutor.egna[S.vald];
+    if (S.tema !== 'egna' || !r || !r.bild) return;
+    drag = { x:e.clientX, y:e.clientY, rx:r.x, ry:r.y, r };
+    big.setPointerCapture(e.pointerId);
+  });
+  big.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const { r } = drag, rect = big.getBoundingClientRect();
+    const sk = Math.max(W / r.bild.naturalWidth, H / r.bild.naturalHeight) * r.zoom;
+    const maxX = (r.bild.naturalWidth * sk - W) / 2 || 1e-9, maxY = (r.bild.naturalHeight * sk - H) / 2 || 1e-9;
+    const f = W / rect.width;
+    r.x = drag.rx + (e.clientX - drag.x) * f / maxX;
+    r.y = drag.ry + (e.clientY - drag.y) * f / maxY;
+    ritaPa($('big'), S.vald, S.visa);
+  });
+  const slut = () => { if (drag) { drag = null; ritaAlla(); } };
+  big.addEventListener('pointerup', slut); big.addEventListener('pointercancel', slut);
+}
+
+// Export
+function filnamnsdel(s) {
+  return (s || '').normalize('NFC').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '-').slice(0, 40);
+}
+async function tillPng(k, typ, skala) {
+  const c = document.createElement('canvas');
+  c.width = W * skala; c.height = H * skala;
+  const ctx = c.getContext('2d');
+  ctx.setTransform(skala, 0, 0, skala, 0, 0);
+  ritaRuta(ctx, k, typ);
+  return new Promise(ok => c.toBlob(ok, 'image/png'));
+}
+$('exportera').addEventListener('click', async () => {
+  const knapp = $('exportera');
+  knapp.disabled = true; knapp.textContent = 'Packar …';
+  try {
+    const zip = new JSZip();
+    const skala = +$('upplosning').value;
+    const medSvar = $('medSvar').checked;
+    for (let k = 0; k < 9; k++) {
+      zip.file(`fraga-${k + 1}.png`, await tillPng(k, 'q', skala));
+      if (medSvar) zip.file(`svar-${k + 1}.png`, await tillPng(k, 'a', skala));
+    }
+    if (medSvar) zip.file('svar.txt', $('lista').value + '\n');
+    const blob = await zip.generateAsync({ type:'blob' });
+    const namn = 'miniquiz-' + filnamnsdel(S.tema === 'regioner' ? landNamn[S.land] : S.tema === 'lander' ? VARLDSDELAR.find(v => v.id === S.varldsdel).namn : 'egna') + '.zip';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = namn;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    $('status').textContent = `Sparade ${namn}.`;
+  } catch (err) {
+    $('status').textContent = 'Exporten misslyckades: ' + err.message;
+  } finally {
+    knapp.disabled = false; knapp.textContent = 'Ladda ner zip';
+  }
+});
+
+// Start
+fyllLander(); fyllNiva(); uppdateraTema(); fyllObjekt(); slumpaAlla(); uppdateraVal();
+ritaAlla();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(ritaAlla);
+}
+</script>
+</body>
+</html>
